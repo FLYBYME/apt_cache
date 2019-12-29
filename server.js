@@ -101,7 +101,9 @@ const proxy = http.createServer((req, res) => {
     let file = path.join(__dirname, folders[req.headers.host] ? folders[req.headers.host] : req.headers.host, pathname, filename)
 
     let fullPath = path.join(__dirname, folders[req.headers.host] ? folders[req.headers.host] : req.headers.host, pathname, filename);
-
+  if (!hostnames[req.headers.host]) {
+        res.emd(req.headers.host)
+    }
     const options = {
         hostname: hostnames[req.headers.host],
         port: 80,
