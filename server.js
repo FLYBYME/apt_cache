@@ -102,7 +102,7 @@ const proxy = http.createServer((req, res) => {
 
     let fullPath = path.join(__dirname, folders[req.headers.host] ? folders[req.headers.host] : req.headers.host, pathname, filename);
   if (!hostnames[req.headers.host]) {
-        res.emd(req.headers.host)
+        res.end(req.headers.host)
     }
     const options = {
         hostname: hostnames[req.headers.host],
