@@ -1,0 +1,16 @@
+{
+  "name": "network",
+  "version": "0.0.0",
+  "description": "network",
+  "main": "app.js",
+  "author": {
+    "name": ""
+  },
+  "dependencies": {
+    "dhcp": "git+https://github.com/infusion/node-dhcp.git",
+    "fs-extra": "^8.1.0",
+    "last-one-wins": "^1.0.4",
+    "mime": "^2.4.4",
+    "tftp": "^0.1.2"
+  }
+}
