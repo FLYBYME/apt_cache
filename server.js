@@ -109,7 +109,7 @@ const proxy = http.createServer((req, res) => {
         headers: req.headers
     };
 
-    options.headers.host = hostnames[req.headers.host]
+    //options.headers.host = hostnames[req.headers.host]
 
     if (['.deb', '.udeb', '.iso'].includes(path.extname(filename))) {
 
