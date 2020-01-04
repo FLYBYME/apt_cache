@@ -82,7 +82,7 @@ let upload = function (source, stats, stream) {
 }
 
 const proxy = http.createServer((req, res) => {
-    return res.end(req.headers.host)
+    //return res.end(req.headers.host)
     let pathname = req.url.split('/');
     let filename = pathname.pop();
     pathname = pathname.join('/');
@@ -181,4 +181,4 @@ const proxy = http.createServer((req, res) => {
 
 });
 
-proxy.listen(8080)
+//proxy.listen(8080)
