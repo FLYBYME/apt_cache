@@ -8,16 +8,9 @@ const mime = require('mime');
 
 // redis-cli -a vLDuwCd2PMI0VkNZBokcziq3pxHxZdUH rpush A:download.docker.com '{"name":"download.docker.com","ttl":1000,"data":"10.0.0.3"}'
 
-const folders = {
-    'us.archive.ubuntu.com': 'archive.ubuntu.com'
-}
-
 const hostnames = {
-    'ports.ubuntu.com': '91.189.88.150',
-    'ftp.debian.org': '130.89.148.12',
-    'security.debian.org': '149.20.4.14',
-    'archive.ubuntu.com': '192.175.120.167',
-    'us.archive.ubuntu.com': '192.175.120.167'
+    'ubuntu.archive.nodetopia.xyz': '192.175.120.167',
+    'debian.archive.nodetopia.xyz': '192.175.120.168'
 };
 
 let downloading = {};
@@ -95,14 +88,17 @@ const proxy = http.createServer((req, res) => {
 
     //console.log(req.headers)
 
-    const dir = path.join(__dirname, folders[req.headers.host] ? folders[req.headers.host] : req.headers.host, pathname)
+    const dir = path.join(__dirname, req.headers.host, pathname)
     // console.log(path.join(__dirname, req.headers.host, pathname, filename))
 
-    let file = path.join(__dirname, folders[req.headers.host] ? folders[req.headers.host] : req.headers.host, pathname, filename)
+    let file = path.join(__dirname, req.headers.host, pathname, filename)
 
-    let fullPath = path.join(__dirname, folders[req.headers.host] ? folders[req.headers.host] : req.headers.host, pathname, filename);
-  if (!hostnames[req.headers.host]) {
-        res.end(req.headers.host)
+    let fullPath = path.join(__dirname, req.headers.host, pathname, filename);
+
+
+
+    if (!hostnames[req.headers.host]) {
+        res.end(req.headers.host);
     }
     const options = {
         hostname: hostnames[req.headers.host],
