@@ -107,7 +107,7 @@ const proxy = http.createServer((req, res) => {
         method: req.method,
         headers: req.headers
     };
-     console.log(options)
+    return console.log(options)
     if (['.deb', '.udeb', '.iso'].includes(path.extname(filename))) {
 
         function onDownload(err) {
