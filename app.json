@@ -26,7 +26,8 @@
   "formation": {
     "web": {
       "quantity": 1,
-      "size": "1M"
+      "size": "1M",
+      "volume": "/app/files"
     }
   },
   "image": "heroku/ruby",

@@ -83,17 +83,12 @@ let upload = function (source, stats, stream) {
 }
 
 const proxy = http.createServer((req, res) => {
-    //return res.end(req.headers.host)
+
     let pathname = req.url.split('/');
     let filename = pathname.pop();
     pathname = pathname.join('/');
 
-    //console.log(req.headers)
-
-    const dir = path.join(__dirname, req.headers.host, pathname)
-    // console.log(path.join(__dirname, req.headers.host, pathname, filename))
-
-    let file = path.join(__dirname, req.headers.host, pathname, filename)
+    const dir = path.join(__dirname, req.headers.host, pathname);
 
     let fullPath = path.join(__dirname, req.headers.host, pathname, filename);
 
@@ -111,9 +106,9 @@ const proxy = http.createServer((req, res) => {
     };
 
 
-    if (['.deb', '.udeb', '.iso','.apk'].includes(path.extname(filename))) {
+    if (['.deb', '.udeb', '.iso', '.apk'].includes(path.extname(filename))) {
 
-        function onDownload(err) {
+        let onDownload = function(err) {
             if (err) {
                 console.log('download err', err)
                 res.writeHead(500);
@@ -131,7 +126,7 @@ const proxy = http.createServer((req, res) => {
         }
         fs.stat(fullPath, function (err, stats) {
             if (err) {
-                fse.ensureDir(path.join(__dirname, req.headers.host, pathname), function (err) {
+                fse.ensureDir(dir, function (err) {
                     download(options, fullPath, onDownload)
                 })
             } else {
