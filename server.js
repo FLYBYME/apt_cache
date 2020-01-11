@@ -10,7 +10,8 @@ const mime = require('mime');
 
 const hostnames = {
     'ubuntu.archive.nodetopia.xyz': '192.175.120.167',
-    'debian.archive.nodetopia.xyz': '192.175.120.168'
+    'debian.archive.nodetopia.xyz': '192.175.120.168',
+    'alpine.archive.nodetopia.xyz': '192.175.120.183'
 };
 
 let downloading = {};
@@ -110,7 +111,7 @@ const proxy = http.createServer((req, res) => {
     };
 
 
-    if (['.deb', '.udeb', '.iso'].includes(path.extname(filename))) {
+    if (['.deb', '.udeb', '.iso','.apk'].includes(path.extname(filename))) {
 
         function onDownload(err) {
             if (err) {
