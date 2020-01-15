@@ -88,9 +88,9 @@ const proxy = http.createServer((req, res) => {
     let filename = pathname.pop();
     pathname = pathname.join('/');
 
-    const dir = path.join(__dirname, req.headers.host, pathname);
+    const dir = path.join('/app/files', req.headers.host, pathname);
 
-    let fullPath = path.join(__dirname, req.headers.host, pathname, filename);
+    let fullPath = path.join('/app/files', req.headers.host, pathname, filename);
 
 
 
