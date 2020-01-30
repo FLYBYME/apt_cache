@@ -25,7 +25,7 @@
   },
   "formation": {
     "web": {
-      "quantity": 10,
+      "quantity": 1,
       "size": "4S",
       "volume": "/app/files"
     }
