@@ -5,15 +5,15 @@ const fs = require('fs');
 const path = require('path');
 const fse = require('fs-extra');
 const mime = require('mime');
-
+const crypto = require('crypto');
 
 
 // redis-cli -a vLDuwCd2PMI0VkNZBokcziq3pxHxZdUH rpush A:download.docker.com '{"name":"download.docker.com","ttl":1000,"data":"10.0.0.3"}'
 
 const hostnames = {
-    'ubuntu.archive.nodetopia.xyz': '192.175.120.167',
-    'debian.archive.nodetopia.xyz': '192.175.120.168',
-    'alpine.archive.nodetopia.xyz': '208.74.142.61'
+    'ubuntu-archive.nodetopia.xyz': '192.175.120.167',
+    'debian-archive.nodetopia.xyz': '192.175.120.168',
+    'alpine-archive.nodetopia.xyz': '208.74.142.61'
 };
 
 let downloading = {};
@@ -56,7 +56,15 @@ let download = function (options, dest, cb) {
             dataLength += chunk.length;
             // console.log('response data', chunk.length)
         }).pipe(file);
+        var hash = crypto.createHash('sha1');
+        hash.setEncoding('hex');
+
+
+        // read all file and pipe it (write it) to the hash object
+        response.pipe(hash);
         file.on('finish', function () {
+            hash.end();
+            console.log(hash.read()); // the desired sha1sum
             file.close(function () {
                 if (contentLength != dataLength) {
                     fs.unlink(dest); // Delete the file async. (But we don't check the result)
@@ -90,9 +98,9 @@ const proxy = http.createServer((req, res) => {
     let filename = pathname.pop();
     pathname = pathname.join('/');
 
-    const dir = path.join('/app/files', req.headers.host, pathname);
+    const dir = path.join('./files', req.headers.host, pathname);
 
-    let fullPath = path.join('/app/files', req.headers.host, pathname, filename);
+    let fullPath = path.join('./files', req.headers.host, pathname, filename);
 
 
 
@@ -106,11 +114,11 @@ const proxy = http.createServer((req, res) => {
         method: req.method,
         headers: req.headers
     };
+    console.log(pathname, filename)
 
+    if (['.deb', '.udeb', '.iso', '.apk', '.tar.xz'].some(v => filename.includes(v))) {
 
-    if (['.deb', '.udeb', '.iso', '.apk'].includes(path.extname(filename))) {
-
-        let onDownload = function(err) {
+        let onDownload = function (err) {
             if (err) {
                 console.log('download err', err)
                 res.writeHead(500);
