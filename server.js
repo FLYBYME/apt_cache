@@ -10,11 +10,14 @@ const crypto = require('crypto');
 
 // redis-cli -a vLDuwCd2PMI0VkNZBokcziq3pxHxZdUH rpush A:download.docker.com '{"name":"download.docker.com","ttl":1000,"data":"10.0.0.3"}'
 
-const hostnames = {
-    '10.73.50.5:9080': '192.175.120.167',
-    'debian-archive.nodetopia.xyz': '192.175.120.168',
-    'alpine-archive.nodetopia.xyz': '208.74.142.61'
-};
+const hostnames = {};
+
+(process.env.HOSTS || '').split('!').forEach((str) => {
+    const hostname = str.split(',')[0]
+    const ip = str.split(',')[1]
+    hostnames[hostname] = ip
+});
+
 
 let downloading = {};
 let cache = {};
@@ -64,7 +67,7 @@ let download = function (options, dest, cb) {
         response.pipe(hash);
         file.on('finish', function () {
             hash.end();
-           // console.log(hash.read()); // the desired sha1sum
+            // console.log(hash.read()); // the desired sha1sum
             file.close(function () {
                 if (contentLength != dataLength) {
                     fs.unlink(dest); // Delete the file async. (But we don't check the result)
@@ -116,7 +119,7 @@ const proxy = http.createServer((req, res) => {
     };
     //console.log(pathname, filename,options)
 
-    if (['.deb', '.udeb', '.iso', '.apk', '.tar.xz','.tar.gz','rke_linux-amd64'].some(v => filename.includes(v))) {
+    if (['.deb', '.udeb', '.iso', '.apk', '.tar.xz', '.tar.gz', 'rke_linux-amd64'].some(v => filename.includes(v))) {
 
         let onDownload = function (err) {
             if (err) {
@@ -169,13 +172,13 @@ const proxy = http.createServer((req, res) => {
                     }, 60 * 1000);
                 })
             });
-            get.once('error',()=>{
+            get.once('error', () => {
                 res.end();
             })
             return get.end();
         }
 
-       // console.log(`http://${req.headers.host}${req.url}`)
+        // console.log(`http://${req.headers.host}${req.url}`)
         const get = http.request(options, (_res) => {
             //console.log(`STATUS: ${_res.statusCode}`);
             //console.log(`HEADERS: ${JSON.stringify(_res.headers)}`);
@@ -183,9 +186,9 @@ const proxy = http.createServer((req, res) => {
             _res.pipe(res)
 
         });
-            get.once('error',()=>{
-                res.end();
-            })
+        get.once('error', () => {
+            res.end();
+        })
         get.end();
     }
 
