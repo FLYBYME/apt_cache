@@ -12,5 +12,11 @@
     "last-one-wins": "^1.0.4",
     "mime": "^2.4.4",
     "tftp": "^0.1.2"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/mime": "^3.0.4",
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3"
   }
 }
