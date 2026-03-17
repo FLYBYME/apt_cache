@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "description": "network",
   "main": "app.js",
+  "type": "module",
   "author": {
     "name": ""
   },
@@ -12,5 +13,8 @@
     "last-one-wins": "^1.0.4",
     "mime": "^2.4.4",
     "tftp": "^0.1.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
   }
 }
