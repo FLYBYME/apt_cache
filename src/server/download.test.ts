@@ -11,6 +11,10 @@ jest.mock('http');
 jest.mock('crypto');
 
 describe('Download Module', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('isDownloading', () => {
     it('should return false if not downloading', () => {
       expect(isDownloading('some-file')).toBe(false);
@@ -122,6 +126,7 @@ describe('Download Module', () => {
 
     afterEach(() => {
       (console.log as jest.Mock).mockRestore();
+      jest.clearAllMocks();
     });
 
     it('should download a file successfully', (done) => {
@@ -152,7 +157,7 @@ describe('Download Module', () => {
         expect(fs.unlink).toHaveBeenCalledWith(dest, expect.any(Function));
         
         // Also verify the unlink callback doesn't throw
-        const unlinkCb = (fs.unlink as jest.Mock).mock.calls[0][1];
+        const unlinkCb = (fs.unlink as unknown as jest.Mock).mock.calls[0][1];
         expect(() => unlinkCb(new Error('unlink error'))).not.toThrow();
         
         done();

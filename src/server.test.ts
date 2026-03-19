@@ -16,7 +16,21 @@ jest.mock('./server/config', () => ({
   }
 }));
 
-jest.mock('./server/cache');
+jest.mock('./server/cache', () => {
+  return {
+    responseCache: {
+      get: jest.fn(),
+      set: jest.fn(),
+    },
+    getCachePath: jest.fn().mockImplementation((host, urlStr) => {
+      const urlParts = urlStr.split('?')[0].split('/');
+      const filename = urlParts.pop() || '';
+      return { dir: '/tmp', fullPath: `/tmp/${filename}`, filename };
+    }),
+    shouldCacheOnDisk: jest.fn().mockImplementation((filename) => filename.endsWith('.deb')),
+    shouldCacheInMemory: jest.fn().mockImplementation((filename) => filename === 'Release' || filename === 'InRelease'),
+  };
+});
 jest.mock('./server/download');
 jest.mock('fs');
 jest.mock('fs-extra');
