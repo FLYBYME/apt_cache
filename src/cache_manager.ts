@@ -12,14 +12,25 @@ class HttpError extends Error {
     constructor(statusCode: number, message: string) {
         super(message);
         this.name = 'HttpError';
+        this.statusCode = statusCode; // Assign status code
     }
 }
 
-interface Hostnames {
+export export export interface Hostnames {
     [key: string]: string;
 }
 
 interface DownloadingCallbacks {
+    [key: string]: string;
+}
+
+
+    [key: string]: string;
+}
+
+interface DownloadingCallbacks {
+    [key: string]: Array<(err?: Error | string | null) => void>;
+}
     [key: string]: Array<(err?: Error | string | null) => void>;
 }
 
@@ -58,15 +69,75 @@ export class CacheManager {
      */
     public async download(options: http.RequestOptions, dest: string): Promise<void> {
         if (this.isDownloading(dest)) {
-            throw new Error('Download already in progress for this destination.');
+            return new Promise<void>((resolve, reject) => {
+                this.downloads[dest].push({ resolve, reject });
+            });
         }
 
-        // Reset state for the new download attempt
+        // Mark as downloading and prepare callback queue
         this.downloads[dest] = [];
         console.log(`Starting download process for ${path.basename(dest)}`);
 
-        const filename: string = path.basename(dest);
-        const fileWriteStream: fs.WriteStream = fs.createWriteStream(dest);
+        // Ensure destination directory exists
+        await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+        const fileWriteStream = fs.createWriteStream(dest);
+
+        return new Promise<void>((resolve, reject) => {
+            let dataLength = 0;
+            const request = http.request(options, (response) => {
+                const contentLengthHeader = response.headers["content-length"] as string | undefined;
+                const expectedLength = Number(contentLengthHeader || "0");
+
+                // Hash calculation
+                const hash = crypto.createHash("sha1").setEncoding("hex");
+
+                response.on("data", (chunk: Buffer) => {
+                    dataLength += chunk.length;
+                    hash.update(chunk);
+                });
+
+                response.on("end", () => {
+                    hash.end();
+                    fileWriteStream.close((closeErr?: Error | null) => {
+                        if (expectedLength !== 0 && expectedLength !== dataLength) {
+                            fs.unlink(dest, () => {});
+                            this.cleanDownloads(dest, new HttpError(500, "length mismatch after download"));
+                            return;
+                        }
+                        console.log(`file downloaded ${path.basename(dest)} ${expectedLength} = ${dataLength}`);
+                        this.cleanDownloads(dest, null);
+                        resolve();
+                    });
+                });
+
+                response.on("error", (err: Error) => {
+                    fs.unlink(dest, () => {});
+                    this.cleanDownloads(dest, new HttpError(500, "HTTP request error"));
+                });
+
+                // Pipe to file after setting up listeners
+                response.pipe(fileWriteStream);
+            });
+
+            request.on("error", (err: Error) => {
+                console.log('http.request general err', err);
+                fileWriteStream.end();
+                this.cleanDownloads(dest, new HttpError(500, "Connection error"));
+            });
+
+            request.end();
+        });
+    }
+
+    private cleanDownloads(dest: string, err?: Error | null): void {
+        const callbacks = this.downloads[dest] || [];
+        delete this.downloads[dest];
+        if (err) {
+            callbacks.forEach(cb => cb(err));
+        } else {
+            callbacks.forEach(cb => cb());
+        }
+    }
 
         return new Promise<void>((resolve, reject) => {
             let dataLength: number = 0;

@@ -1,6 +1,102 @@
 import * as http from 'http';
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import { CacheManager, Hostnames } from './cache_manager';
+
+/**
+ * Handles the core HTTP proxying and routing logic, depending on a cache manager.
+ * This class isolates the complex request processing (Business Logic) from server setup.
+ */
+export class HttpProxyService {
+    private readonly cacheManager: CacheManager;
+    private readonly hostnames: Hostnames;
+
+    constructor(cacheManager: CacheManager, hostsEnv: string) {
+        this.cacheManager = cacheManager;
+        // Re-populate hostnames locally or rely on the manager to provide them
+        this.hostnames = this.cacheManager.getHostnames();
+        console.log('HttpProxyService initialized.');
+    }
+
+    public createServerHandler(): (req: http.IncomingMessage, res: http.ServerResponse) => void {
+        return (req: http.IncomingMessage, res: http.ServerResponse) => {
+            const urlStr = req.url || '';
+            const pathnameParts = urlStr.split('/');
+            const filename = pathnameParts.pop() || '';
+            const pathname = pathnameParts.join('/');
+
+            const host = req.headers.host || '';
+            const fullPath = path.join('./files', host, pathname, filename);
+
+            if (!this.hostnames[host]) {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                return res.end(`Host ${host} not found`);
+            }
+
+            const options: http.RequestOptions = {
+                hostname: this.hostnames[host],
+                port: 80,
+                path: req.url,
+                method: req.method,
+                headers: req.headers,
+            };
+
+            const cacheExtensions = ['.deb', '.udeb', '.iso', '.apk', '.tar.xz', '.tar.gz', 'rke_linux-amd64'];
+            const shouldCache = cacheExtensions.some((v) => filename.includes(v));
+
+            if (shouldCache) {
+                // Caching / Download logic
+                const onDownload = async () => {
+                    try {
+                        await this.cacheManager.download(options, fullPath);
+                        fs.stat(fullPath, (statErr: Error | null, stats: fs.Stats) => {
+                            if (statErr) {
+                                res.writeHead(500);
+                                res.end();
+                            } else {
+                                this.cacheManager.uploadFile(fullPath, stats, res);
+                            }
+                        });
+                    } catch (e: any) {
+                        console.error('Failed to cache file:', e.message);
+                        res.writeHead(500);
+                        res.end();
+                    }
+                };
+
+                if (this.cacheManager.isDownloading(fullPath)) {
+                    res.writeHead(503);
+                    return res.end('Content is currently being downloaded.');
+                }
+
+                fs.stat(fullPath, (statErr: Error | null, stats: fs.Stats) => {
+                    if (statErr) {
+                        this.cacheManager.download(options, fullPath)
+                            .then(() => onDownload())
+                            .catch((e: any) => console.error('Download failed:', e));
+                    } else {
+                        console.log(`file cached ${filename}`);
+                        this.cacheManager.uploadFile(fullPath, stats, res);
+                    }
+                });
+            } else {
+                // Non-cached proxy logic
+                const get = http.request(options, (_res) => {
+                    const statusCode = _res.statusCode || 200;
+                    res.writeHead(statusCode, _res.headers as any);
+                    _res.pipe(res);
+                });
+                get.once('error', () => {
+                    res.end();
+                });
+                get.end();
+            }
+        };
+    }
+}
+
+import * as fs from 'fs-extra';
+import * as path from 'path';
 import { CacheManager } from './cache_manager';
 
 /**
@@ -9,7 +105,9 @@ import { CacheManager } from './cache_manager';
  */
 export class HttpProxyService {
     private cacheManager: CacheManager;
-    private readonly hostnames: any; // Will be cast from CacheManager's method
+    import { Hostnames } from './cache_manager';
+-    private readonly hostnames: any; // Will be cast from CacheManager's method
++    private readonly hostnames: Hostnames; // Typed hostnames mapping // Will be cast from CacheManager's method
 
     constructor(cacheManager: CacheManager, hostsEnv: string) {
         this.cacheManager = cacheManager;
@@ -31,7 +129,9 @@ export class HttpProxyService {
             const fullPath: string = path.join('./files', host, pathname, filename);
 
             if (!this.hostnames[host]) {
-                res.end(host);
+                                res.writeHead(404, { 'Content-Type': 'text/plain' });
+-            return res.end(`Host ${host} not found`);
++            return res.end(`Host ${host} not found`);
                 return;
             }
 
@@ -57,7 +157,7 @@ export class HttpProxyService {
                                 res.writeHead(500);
                                 res.end();
                             } else {
-                                this.cacheManager['uploadFile'](fullPath, stats, res);
+                                                        this.cacheManager.uploadFile(fullPath, stats, res);
                             }
                         });
                     } catch (e: any) {
@@ -77,12 +177,12 @@ export class HttpProxyService {
                 fs.stat(fullPath, (statErr: Error | null, stats: fs.Stats): void => {
                     if (statErr) {
                         // Directory/File does not exist, initiate download process
-                        this.cacheManager['download'](options, fullPath).then(() => onDownload()).catch((e: any) => console.error('Download failed:', e));
+                                                this.cacheManager.download(options, fullPath).then(() => onDownload()).catch((e: any) => console.error('Download failed:', e));
 
                     } else {
                         // File exists and is cached
                         console.log(`file cached ${filename}`);
-                        this.cacheManager['uploadFile'](fullPath, stats, res);
+                                                this.cacheManager.uploadFile(fullPath, stats, res);
                     }
                 });
             } else {
