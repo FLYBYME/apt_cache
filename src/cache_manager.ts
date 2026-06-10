@@ -18,15 +18,13 @@ class HttpError extends Error {
 
 export interface Hostnames { [key: string]: string; }
 
-interface DownloadCallback { resolve(): void; reject(err?: Error | null): void; }
-interface DownloadingCallbacks { [dest: string]: Array<DownloadCallback>; }
-
 /**
  * Manages file caching, downloading, and serving logic for the application.
  */
 export class CacheManager {
     private hostnames: Hostnames;
-    private downloads: DownloadingCallbacks = {};
+    // Map of destination path to ongoing download Promise
+    private ongoingDownloads: { [dest: string]: Promise<void> } = {};
     private cacheData: { [key: string]: Buffer } = {};
 
     constructor(hostsEnv: string) {
@@ -43,77 +41,71 @@ export class CacheManager {
     }
 
     public isDownloading(dest: string): boolean {
-        return !!this.downloads[dest];
+        return !!this.ongoingDownloads[dest];
     }
 
     /**
-     * Downloads a file from the given options and saves it to dest, handling concurrency.
+     * Downloads a file from the given options and saves it to dest, handling concurrency by queuing.
      */
     public async download(options: http.RequestOptions, dest: string): Promise<void> {
-        if (this.isDownloading(dest)) {
-            // Concurrent downloads are not supported; throw synchronously as per test expectations.
-            throw new Error('Download already in progress for this destination.');
+        // If a download is already in progress for this destination, return the existing promise
+        if (this.ongoingDownloads[dest]) {
+            return this.ongoingDownloads[dest];
         }
 
-        // Start a new download
-        this.downloads[dest] = [];
+        const promise = new Promise<void>(async (resolve, reject) => {
+            try {
+                // Ensure destination directory exists
+                await fs.promises.mkdir(path.dirname(dest), { recursive: true });
 
-        // Ensure destination directory exists
-        await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+                let dataLength = 0;
+                const request = http.request(options, (response) => {
+                    const contentLengthHeader = response.headers['content-length'];
+                    const expectedLength = Number(contentLengthHeader || '0');
 
-        return new Promise<void>((resolve, reject) => {
-            let dataLength = 0;
-            const request = http.request(options, (response) => {
-                const contentLengthHeader = response.headers['content-length'];
-                const expectedLength = Number(contentLengthHeader || '0');
+                    // Hash calculation
+                    const hash = crypto.createHash('sha1').setEncoding('hex');
+                    response.on('data', (chunk: Buffer) => {
+                        dataLength += chunk.length;
+                        hash.update(chunk);
+                    });
 
-                // Hash calculation
-                const hash = crypto.createHash('sha1').setEncoding('hex');
-                response.on('data', (chunk: Buffer) => {
-                    dataLength += chunk.length;
-                    hash.update(chunk);
-                });
+                    const fileWriteStream = fs.createWriteStream(dest);
+                    response.pipe(fileWriteStream);
 
-                const fileWriteStream = fs.createWriteStream(dest);
-                response.pipe(fileWriteStream);
+                    fileWriteStream.on('finish', () => {
+                        hash.end();
+                        if (expectedLength !== 0 && expectedLength !== dataLength) {
+                            fs.unlink(dest, () => {});
+                            reject(new Error('length mismatch'));
+                            return;
+                        }
+                        console.log(`file downloaded ${path.basename(dest)} ${expectedLength} = ${dataLength}`);
+                        resolve();
+                    });
 
-                fileWriteStream.on('finish', () => {
-                    hash.end();
-                    if (expectedLength !== 0 && expectedLength !== dataLength) {
+                    response.on('error', (err: Error) => {
                         fs.unlink(dest, () => {});
-                        this.cleanDownloads(dest, new HttpError(500, 'length mismatch after download'));
-                        reject(new Error('length mismatch')); // propagate error
-                        return;
-                    }
-                    console.log(`file downloaded ${path.basename(dest)} ${expectedLength} = ${dataLength}`);
-                    this.cleanDownloads(dest, null);
-                    resolve();
+                        reject(err);
+                    });
                 });
 
-                response.on('error', (err: Error) => {
-                    fs.unlink(dest, () => {});
-                    this.cleanDownloads(dest, new HttpError(500, 'HTTP request error'));
+                request.on('error', (err: Error) => {
+                    console.log('http.request general err', err);
                     reject(err);
                 });
-            });
 
-            request.on('error', (err: Error) => {
-                console.log('http.request general err', err);
-                this.cleanDownloads(dest, new HttpError(500, 'Connection error'));
-                reject(err);
-            });
-
-            request.end();
+                request.end();
+            } catch (err) {
+                reject(err as any);
+            }
         });
-    }
 
-    private cleanDownloads(dest: string, err?: Error | null): void {
-        const callbacks = this.downloads[dest] || [];
-        delete this.downloads[dest];
-        if (err) {
-            callbacks.forEach(cb => cb.reject(err));
-        } else {
-            callbacks.forEach(cb => cb.resolve());
+        this.ongoingDownloads[dest] = promise;
+        try {
+            await promise;
+        } finally {
+            delete this.ongoingDownloads[dest];
         }
     }
 
