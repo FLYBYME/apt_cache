@@ -1,5 +1,5 @@
 import * as http from 'http';
-import * as fs from 'fs-extra';
+import * as fsExtra from 'fs-extra';
 import { HttpProxyService } from '../src/proxy_service';
 import { CacheManager } from '../src/cache_manager';
 import { Readable, Writable } from 'stream';
@@ -7,9 +7,9 @@ import { Readable, Writable } from 'stream';
 jest.mock('http');
 const mockedHttp = http as jest.Mocked<typeof http>;
 jest.mock('fs-extra');
-const mockedFs = fs as jest.Mocked<typeof fs>;
+const mockedFs = fsExtra as jest.Mocked<typeof fsExtra>;
 
-function createMockResponse(headers: http.IncomingMessage['headers'], dataChunks?: Buffer[]): Readable {
+function createMockReadable(headers: http.IncomingMessage['headers'], dataChunks?: Buffer[]): Readable {
     const stream = new Readable({ read() {} });
     (stream as any).headers = headers;
     if (dataChunks) {
@@ -19,13 +19,6 @@ function createMockResponse(headers: http.IncomingMessage['headers'], dataChunks
         });
     }
     return stream;
-}
-
-function createMockWritable(): Writable {
-    const writable = new Writable({ write(chunk, encoding, callback) { callback(); }});
-    (writable as any).chunks: Buffer[] = [];
-    writable.on('finish', () => {} );
-    return writable;
 }
 
 describe('HttpProxyService caching logic', () => {
@@ -43,13 +36,8 @@ describe('HttpProxyService caching logic', () => {
   });
 
   test('returns 503 when download in progress', () => {
-    const req = new (require('events').EventEmitter)() as any;
-    req.url = '/file.deb';
-    req.headers = { host: 'example.com' };
-    const res = {
-      writeHead: jest.fn(),
-      end: jest.fn()
-    } as any;
+    const req = { url: '/file.deb', headers: { host: 'example.com' } } as any;
+    const res = { writeHead: jest.fn(), end: jest.fn() } as any;
 
     jest.spyOn(cacheManager, 'isDownloading').mockReturnValue(true);
 
@@ -58,37 +46,26 @@ describe('HttpProxyService caching logic', () => {
     expect(res.end).toHaveBeenCalledWith('Content is currently being downloaded.');
   });
 
-  test('downloads and serves file when not cached', async () => {
-    const req = new (require('events').EventEmitter)() as any;
-    req.url = '/file.deb';
-    req.headers = { host: 'example.com' };
-    const res = {
-      writeHead: jest.fn(),
-      end: jest.fn()
-    } as any;
+  test('downloads and serves file when not cached', () => {
+    const req = { url: '/file.deb', headers: { host: 'example.com' } } as any;
+    const res = { writeHead: jest.fn(), end: jest.fn() } as any;
 
     jest.spyOn(cacheManager, 'isDownloading').mockReturnValue(false);
+    jest.spyOn(cacheManager, 'download').mockResolvedValue();
+    jest.spyOn(cacheManager, 'uploadFile').mockImplementation(() => {});
 
-    // Mock stat to error -> trigger download
+    // First stat call errors -> trigger download
     mockedFs.stat.mockImplementationOnce((p, cb) => {
       cb(new Error('not found'), null as any);
     });
-
-    // Mock download to resolve immediately
-    const mockDownload = jest.spyOn(cacheManager, 'download').mockResolvedValue();
-
-    // After download, stat returns stats and uploadFile called
+    // After download, second stat returns stats
     mockedFs.stat.mockImplementationOnce((p, cb) => {
       cb(null, { size: 123 } as any);
     });
 
-    jest.spyOn(cacheManager, 'uploadFile').mockImplementation(() => {});
-
-    // Invoke handler asynchronously to allow promises
-    await new Promise<void>(resolve => setImmediate(resolve));
     handler(req, res);
-    await new Promise(r => setTimeout(r, 10));
-    expect(mockDownload).toHaveBeenCalled();
+    expect(cacheManager.download).toHaveBeenCalled();
+    expect(cacheManager.uploadFile).toHaveBeenCalled();
   });
 });
 
@@ -105,27 +82,17 @@ describe('HttpProxyService proxy logic', () => {
     handler = service.createServerHandler();
   });
 
-  test('proxies non-cacheable request', async () => {
-    const req = new (require('events').EventEmitter)() as any;
-    req.url = '/index.html';
-    req.headers = { host: 'example.com' };
-    const res = {
-      writeHead: jest.fn(),
-      end: jest.fn()
-    } as any;
+  test('proxies non-cacheable request', () => {
+    const req = { url: '/index.html', headers: { host: 'example.com' } } as any;
+    const res = { writeHead: jest.fn(), end: jest.fn() } as any;
 
-    const reqInstance = new (require('events').EventEmitter)();
-            reqInstance.once = jest.fn().mockImplementation((event, cb) => {cb(); return reqInstance;});
-            reqInstance.end = jest.fn();
-            return reqInstance;
-        });
-      const resp = createMockResponse({ 'content-type': 'text/html' }, [Buffer.from('<html>')]);
-      process.nextTick(() => cb(resp));
-      return new (require('events').EventEmitter)();
+    mockedHttp.request.mockImplementation((options, cb) => {
+      const response = createMockReadable({ 'content-type': 'text/html' }, [Buffer.from('<html>')]);
+      process.nextTick(() => cb(response));
+      return { once: jest.fn(), end: jest.fn() } as any;
     });
 
     handler(req, res);
-    await new Promise(r => setImmediate(r));
     expect(res.writeHead).toHaveBeenCalledWith(200, { 'content-type': 'text/html' });
   });
 });

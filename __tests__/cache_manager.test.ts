@@ -3,11 +3,19 @@ import * as fs from 'fs';
 import { CacheManager, HttpError } from '../src/cache_manager';
 import { Readable, Writable } from 'stream';
 
-// Mock the http module to control request/response behavior
 jest.mock('http');
 const mockedHttp = http as jest.Mocked<typeof http>;
 
-function createMockResponse(headers: http.IncomingMessage['headers'], dataChunks?: Buffer[]): Readable {
+// A simple in-memory writable stream that records chunks and emits finish.
+function createMockWritable(): Writable {
+    const writable = new Writable({ write(chunk, encoding, callback) { (this as any).chunks.push(Buffer.from(chunk)); callback(); } });
+    (writable as any).chunks = [];
+    writable.on('finish', () => { (writable as any).finished = true; });
+    return writable;
+}
+
+// A simple readable stream that emits provided chunks then end.
+function createMockReadable(headers: http.IncomingMessage['headers'], dataChunks?: Buffer[]): Readable {
     const stream = new Readable({ read() {} });
     (stream as any).headers = headers;
     if (dataChunks) {
@@ -17,17 +25,6 @@ function createMockResponse(headers: http.IncomingMessage['headers'], dataChunks
         });
     }
     return stream;
-}
-
-function createMockWritable(): Writable & { finished: boolean } {
-    const writable = new Writable({ write(chunk, encoding, callback) {
-        this.chunks.push(Buffer.from(chunk));
-        callback();
-    }} as any);
-    (writable as any).chunks = [];
-    (writable as any).finished = false;
-    writable.on('finish', () => { (writable as any).finished = true; });
-    return writable as Writable & { finished: boolean };
 }
 
 describe('CacheManager', () => {
@@ -51,45 +48,55 @@ describe('CacheManager', () => {
 
   test('download succeeds with matching content-length', async () => {
     const dest = '/tmp/file';
-    const responseHeaders: http.IncomingMessage['headers'] = { 'content-length': '6' };
-    const resp = createMockResponse(responseHeaders, [Buffer.from('abcdef')]);
+    const headers: http.IncomingMessage['headers'] = { 'content-length': '6' };
+    const response = createMockReadable(headers, [Buffer.from('abcdef')]);
 
     mockedHttp.request.mockImplementation((options, cb) => {
-      process.nextTick(() => cb(resp));
       const req = new (require('events').EventEmitter)();
-            req.end = jest.fn();
-            return req;
-        }); // request object
+      process.nextTick(() => cb(response));
+      return req;
     });
 
-    await expect(manager.download({ host: 'localhost' }, dest)).resolves.toBeUndefined();
+    // Stub file write stream and unlink
+    const mockWriteStream = createMockWritable();
+    jest.spyOn(fs, 'createWriteStream').mockReturnValue(mockWriteStream as any);
+    const unlinkSpy = jest.fn();
+    jest.spyOn(fs, 'unlink').mockImplementation(unlinkSpy as any);
+
+    await expect(manager.download({ host: 'localhost' } as any, dest)).resolves.toBeUndefined();
+    expect((mockWriteStream as any).finished).toBe(true);
+    expect(unlinkSpy).not.toHaveBeenCalled();
   });
 
   test('download fails when content-length mismatch', async () => {
     const dest = '/tmp/file';
-    const responseHeaders: http.IncomingMessage['headers'] = { 'content-length': '10' };
-    const resp = createMockResponse(responseHeaders, [Buffer.from('abc')]);
+    const headers: http.IncomingMessage['headers'] = { 'content-length': '10' };
+    const response = createMockReadable(headers, [Buffer.from('abc')]);
 
     mockedHttp.request.mockImplementation((options, cb) => {
-      process.nextTick(() => cb(resp));
       const req = new (require('events').EventEmitter)();
-            req.end = jest.fn();
-            return req;
-        });
+      process.nextTick(() => cb(response));
+      return req;
     });
 
-    await expect(manager.download({ host: 'localhost' }, dest)).rejects.toThrow(HttpError);
+    jest.spyOn(fs, 'createWriteStream').mockReturnValue(createMockWritable() as any);
+    const unlinkSpy = jest.fn();
+    jest.spyOn(fs, 'unlink').mockImplementation(unlinkSpy as any);
+
+    await expect(manager.download({ host: 'localhost' } as any, dest)).rejects.toThrow(HttpError);
+    expect(unlinkSpy).toHaveBeenCalled();
   });
 
   test('download rejects on HTTP error event', async () => {
     const dest = '/tmp/file';
+
     mockedHttp.request.mockImplementation((options, cb) => {
       const req = new (require('events').EventEmitter)();
       process.nextTick(() => req.emit('error', new Error('connection failed')));
       return req;
     });
 
-    await expect(manager.download({ host: 'localhost' }, dest)).rejects.toThrow(HttpError);
+    await expect(manager.download({ host: 'localhost' } as any, dest)).rejects.toThrow(HttpError);
   });
 
   test('uploadFile sets correct headers and streams file', () => {
@@ -100,17 +107,17 @@ describe('CacheManager', () => {
       end: jest.fn()
     } as any;
 
-    // Mock read stream
+    // Mock read stream that pipes to response
     const readStream = new Readable({ read() {} });
-    readStream.pipe = jest.fn(() => resMock);
-    (fs as any).createReadStream = jest.fn(() => readStream);
+    (readStream as any).pipe = jest.fn(() => resMock);
+    jest.spyOn(fs, 'createReadStream').mockReturnValue(readStream as any);
 
     manager.uploadFile(source, stats, resMock);
     expect(resMock.writeHead).toHaveBeenCalledWith(200, {
       "content-length": 11,
       "content-type": 'text/plain'
     });
-    expect(readStream.pipe).toHaveBeenCalledWith(resMock);
+    expect((readStream as any).pipe).toHaveBeenCalledWith(resMock);
   });
 
   test('cacheResource stores buffer and removes after timeout', () => {
