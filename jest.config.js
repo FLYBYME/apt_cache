@@ -3,7 +3,7 @@ module.exports = {
   testEnvironment: 'node',
   moduleFileExtensions: ['ts', 'js'],
   // Pattern that matches all .ts files in the __tests__ directory
-  testRegex: '/__tests__/.*\\.ts$',
+  testRegex: '^.+/__tests__/.*\\.ts$',
   collectCoverage: true,
   // Removed coverage thresholds to allow tests to pass while full coverage is added later.
   // coverageThreshold: {

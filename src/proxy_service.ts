@@ -9,7 +9,7 @@ import { CacheManager } from './cache_manager';
  */
 export class HttpProxyService {
     private cacheManager: CacheManager;
-    private readonly hostnames: any; // Will be cast from CacheManager's method
+    private readonly hostnames: Record<string, string>; // Will be cast from CacheManager's method
 
     constructor(cacheManager: CacheManager, hostsEnv: string) {
         this.cacheManager = cacheManager;
