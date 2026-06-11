@@ -84,7 +84,7 @@ export class CacheManager {
 
                 response.pipe(hash);
 
-                fileWriteStream.on("finish", (): void => {
+                response.once("end", (): void => {
                     hash.end();
                     fileWriteStream.close((closeErr?: Error | null): void => {
                         if (contentLength !== dataLength) {
@@ -122,7 +122,7 @@ export class CacheManager {
      */
     public uploadFile(source: string, stats: fs.Stats, res: http.ServerResponse): void {
         const ext: string = path.extname(source);
-        const contentType: string | null = mime.getType(ext);
+        const contentType: string | false | null = mime.getType(ext);
         res.writeHead(200, {
             "content-length": stats.size,
             "content-type": contentType || 'application/octet-stream'
