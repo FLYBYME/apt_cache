@@ -108,35 +108,40 @@ export class CacheManager {
             const filename: string = path.basename(dest);
             const fileWriteStream: fs.WriteStream = fs.createWriteStream(dest);
 
-            let dataLength: number = 0;
 
-            const fileWriteStream: fs.WriteStream = fs.createWriteStream(dest);
 
             const request: http.ClientRequest = http.request(options, (response: http.IncomingMessage): void => {
                 const contentLengthHeader: string | undefined = response.headers["content-length"];
                 const contentLength: number = Number(contentLengthHeader || '0');
 
-                let dataLength: number = 0;
+                let received: number = 0;
                 const hash: crypto.Hash = crypto.createHash('sha1');
                 hash.setEncoding('hex');
 
                 response.on('data', (chunk: Buffer): void => {
-                    dataLength += chunk.length;
+                    received += chunk.length;
                     hash.update(chunk);
                 });
                 // Pipe to file
-                const fileWriteStreamInner: fs.WriteStream = fs.createWriteStream(dest);
-                response.pipe(fileWriteStreamInner);
+                response.pipe(fileWriteStream);
 
                 const finalize = () => {
-                    if (dataLength !== contentLength) {
+                    if (received !== contentLength) {
                         fs.unlink(dest, () => {});
                         reject(new HttpError(500, 'length mismatch after download'));
                     } else {
-                        console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
+                        console.log(`file downloaded ${filename} ${contentLength} = ${received}`);
                         resolve();
                     }
                 };
+
+                response.once('end', finalize);
+
+                fileWriteStream.on("error", (err: Error): void => {
+                    fs.unlink(dest, () => {});
+                    reject(new HttpError(500, 'write stream error'));
+                });
+            });
 
                 const tryFinalize = () => {
                     if (dataLength === contentLength) {
