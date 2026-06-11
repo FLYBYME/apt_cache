@@ -9,7 +9,8 @@ import { CacheManager } from './cache_manager';
  */
 export class HttpProxyService {
     private cacheManager: CacheManager;
-    private readonly hostnames: any; // Will be cast from CacheManager's method
+    private readonly hostnames: { [key: string]: string }; // will be populated from CacheManager
+
 
     constructor(cacheManager: CacheManager, hostsEnv: string) {
         this.cacheManager = cacheManager;
@@ -91,8 +92,9 @@ export class HttpProxyService {
                 if (false && (filename === 'InRelease' || filename === 'Release')) {
                     const cacheKey: string = req.url || '';
                     const buf: Buffer | undefined = this.cacheManager.getCachedContent(cacheKey);
-                    if (buf !== undefined && buf !== null) {
-                        res.writeHead(200, {'content-length': buf.length});
+                    if (buf) {
+                        res.writeHead(200, {'content-length': buf!.length});
+
                         res.end(buf);
                         return;
                     }
