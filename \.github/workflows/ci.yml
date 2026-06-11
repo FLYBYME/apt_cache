@@ -1,0 +1,42 @@
+# CI – Build & Test
+#
+# This workflow:
+# 1. Checks out the code.
+# 2. Sets up Node.js 20.x with npm cache.
+# 3. Installs dependencies via `npm ci`.
+# 4. Performs a no‑emit TypeScript compilation to catch type errors early.
+# 5. Runs Jest tests (coverage enabled by package.json).
+
+name: CI – Build & Test
+
+on:
+  push:
+    branches:
+      - main
+      - '*'
+  pull_request:
+    branches:
+      - main
+      - '*'
+
+jobs:
+  build-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript compile check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm test
