@@ -1,24 +1,47 @@
 import * as http from 'http';
-import * as fsExtra from 'fs-extra';
+import * as fsExtra from 'fs-extra'; // will be mocked
 import { HttpProxyService } from '../src/proxy_service';
 import { CacheManager } from '../src/cache_manager';
-import { Readable, Writable } from 'stream';
+import { Readable } from 'stream';
+import { EventEmitter } from 'events';
 
+// Mock the 'fs-extra' module to provide a mock implementation for stat.
+jest.mock('fs-extra', () => ({
+  ...jest.requireActual('fs-extra'),
+  stat: jest.fn(),
+}));
+const mockFsExtra = fsExtra as jest.Mocked<typeof import('fs-extra')>;
+
+// Mock the 'http' module; we will use its mocked request method.
 jest.mock('http');
-const mockedHttp = http as jest.Mocked<typeof http>;
-jest.mock('fs-extra');
-const mockedFs = fsExtra as jest.Mocked<typeof fsExtra>;
+const mockedHttp = http as jest.Mocked<typeof import('http')>;
+
+class MockResponse extends EventEmitter {
+  chunks: Buffer[];
+  headers: any;
+  constructor(chunks: Buffer[], headers?: any) {
+    super();
+    this.chunks = chunks || [];
+    if (headers) this.headers = headers;
+  }
+  on(event: string, listener: any): this {
+    if (event === 'data') {
+      // data listeners are handled by pipe
+      return this;
+    } else {
+      return super.on(event, listener);
+    }
+  }
+  pipe(target: any) {
+    this.chunks.forEach(chunk => target.write(chunk));
+    target.end();
+    return target;
+  }
+}
 
 function createMockReadable(headers: http.IncomingMessage['headers'], dataChunks?: Buffer[]): Readable {
-    const stream = new Readable({ read() {} });
-    (stream as any).headers = headers;
-    if (dataChunks) {
-        process.nextTick(() => {
-            dataChunks.forEach(chunk => stream.push(chunk));
-            stream.push(null);
-        });
-    }
-    return stream;
+  const resp = new MockResponse(dataChunks || [], headers);
+  return resp as any;
 }
 
 describe('HttpProxyService caching logic', () => {
@@ -29,9 +52,9 @@ describe('HttpProxyService caching logic', () => {
 
   beforeEach(() => {
     mockedHttp.request.mockReset();
-    mockedFs.stat.mockReset();
+    mockFsExtra.stat.mockClear();
     cacheManager = new CacheManager(hostEnv);
-    service = new HttpProxyService(cacheManager, hostEnv);
+    service = new HttpProxyService(cacheManager);
     handler = service.createServerHandler();
   });
 
@@ -39,6 +62,7 @@ describe('HttpProxyService caching logic', () => {
     const req = { url: '/file.deb', headers: { host: 'example.com' } } as any;
     const res = { writeHead: jest.fn(), end: jest.fn() } as any;
 
+    // Mock isDownloading to return true
     jest.spyOn(cacheManager, 'isDownloading').mockReturnValue(true);
 
     handler(req, res);
@@ -46,20 +70,23 @@ describe('HttpProxyService caching logic', () => {
     expect(res.end).toHaveBeenCalledWith('Content is currently being downloaded.');
   });
 
-  test('downloads and serves file when not cached', () => {
+  test('downloads and serves file when not cached', async () => {
     const req = { url: '/file.deb', headers: { host: 'example.com' } } as any;
     const res = { writeHead: jest.fn(), end: jest.fn() } as any;
 
+    // isDownloading returns false
     jest.spyOn(cacheManager, 'isDownloading').mockReturnValue(false);
+    // download resolves
     jest.spyOn(cacheManager, 'download').mockResolvedValue();
+    // uploadFile is a no-op
     jest.spyOn(cacheManager, 'uploadFile').mockImplementation(() => {});
 
     // First stat call errors -> trigger download
-    mockedFs.stat.mockImplementationOnce((p, cb) => {
+    mockFsExtra.stat.mockImplementationOnce((p, cb) => {
       cb(new Error('not found'), null as any);
     });
     // After download, second stat returns stats
-    mockedFs.stat.mockImplementationOnce((p, cb) => {
+    mockFsExtra.stat.mockImplementationOnce((p, cb) => {
       cb(null, { size: 123 } as any);
     });
 
@@ -78,7 +105,7 @@ describe('HttpProxyService proxy logic', () => {
   beforeEach(() => {
     mockedHttp.request.mockReset();
     cacheManager = new CacheManager(hostEnv);
-    service = new HttpProxyService(cacheManager, hostEnv);
+    service = new HttpProxyService(cacheManager);
     handler = service.createServerHandler();
   });
 

@@ -1,31 +1,58 @@
 import * as http from 'http';
-import * as fs from 'fs';
+import * as fs from 'fs'; // will be mocked
 import { CacheManager, HttpError } from '../src/cache_manager';
 import { Readable, Writable } from 'stream';
+import { EventEmitter } from 'events';
 
-jest.mock('http');
-const mockedHttp = http as jest.Mocked<typeof http>;
+// Mock the entire 'fs' module to provide custom implementations for methods used by CacheManager.
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  createWriteStream: jest.fn(),
+  unlink: jest.fn(),
+  createReadStream: jest.fn()
+}));
+const mockFs = fs as jest.Mocked<typeof import('fs')>;
 
 // A simple in-memory writable stream that records chunks and emits finish.
 function createMockWritable(): Writable {
-    const writable = new Writable({ write(chunk, encoding, callback) { (this as any).chunks.push(Buffer.from(chunk)); callback(); } });
-    (writable as any).chunks = [];
-    writable.on('finish', () => { (writable as any).finished = true; });
-    return writable;
+  const writable = new Writable({ write(chunk, encoding, callback) { (this as any).chunks.push(Buffer.from(chunk)); callback(); } });
+  (writable as any).chunks = [];
+  writable.on('finish', () => { (writable as any).finished = true; });
+  return writable;
 }
 
-// A simple readable stream that emits provided chunks then end.
-function createMockReadable(headers: http.IncomingMessage['headers'], dataChunks?: Buffer[]): Readable {
-    const stream = new Readable({ read() {} });
-    (stream as any).headers = headers;
-    if (dataChunks) {
-        process.nextTick(() => {
-            dataChunks.forEach(chunk => stream.push(chunk));
-            stream.push(null);
-        });
+// Custom response class to handle piping and data listeners.
+class MockResponse extends EventEmitter {
+  chunks: Buffer[];
+  headers: any;
+  constructor(chunks: Buffer[], headers?: any) {
+    super();
+    this.chunks = chunks || [];
+    if (headers) this.headers = headers;
+  }
+  on(event: string, listener: any): this {
+    if (event === 'data') {
+      this.chunks.forEach(chunk => listener(chunk));
+      return this;
+    } else {
+      return super.on(event, listener);
     }
-    return stream;
+  }
+  pipe(target: any) {
+    this.chunks.forEach(chunk => target.write(chunk));
+    target.end();
+    return target;
+  }
 }
+
+function createMockReadable(headers: http.IncomingMessage['headers'], dataChunks?: Buffer[]): Readable {
+  const resp = new MockResponse(dataChunks || [], headers);
+  return resp as any;
+}
+
+// Mock the 'http' module; we will use its mocked request method.
+jest.mock('http');
+const mockedHttp = http as jest.Mocked<typeof import('http')>;
 
 describe('CacheManager', () => {
   const hostsEnv = 'example.com,127.0.0.1!foo.bar,192.168.1.10';
@@ -33,6 +60,9 @@ describe('CacheManager', () => {
 
   beforeEach(() => {
     mockedHttp.request.mockReset();
+    mockFs.createWriteStream.mockClear();
+    mockFs.unlink.mockClear();
+    mockFs.createReadStream.mockClear();
     manager = new CacheManager(hostsEnv);
   });
 
@@ -54,14 +84,14 @@ describe('CacheManager', () => {
     mockedHttp.request.mockImplementation((options, cb) => {
       const req = new (require('events').EventEmitter)();
       process.nextTick(() => cb(response));
-      return req;
+      return req as any;
     });
 
     // Stub file write stream and unlink
     const mockWriteStream = createMockWritable();
-    jest.spyOn(fs, 'createWriteStream').mockReturnValue(mockWriteStream as any);
+    mockFs.createWriteStream.mockReturnValue(mockWriteStream as any);
     const unlinkSpy = jest.fn();
-    jest.spyOn(fs, 'unlink').mockImplementation(unlinkSpy as any);
+    mockFs.unlink.mockImplementation(unlinkSpy as any);
 
     await expect(manager.download({ host: 'localhost' } as any, dest)).resolves.toBeUndefined();
     expect((mockWriteStream as any).finished).toBe(true);
@@ -76,12 +106,12 @@ describe('CacheManager', () => {
     mockedHttp.request.mockImplementation((options, cb) => {
       const req = new (require('events').EventEmitter)();
       process.nextTick(() => cb(response));
-      return req;
+      return req as any;
     });
 
-    jest.spyOn(fs, 'createWriteStream').mockReturnValue(createMockWritable() as any);
+    mockFs.createWriteStream.mockReturnValue(createMockWritable() as any);
     const unlinkSpy = jest.fn();
-    jest.spyOn(fs, 'unlink').mockImplementation(unlinkSpy as any);
+    mockFs.unlink.mockImplementation(unlinkSpy as any);
 
     await expect(manager.download({ host: 'localhost' } as any, dest)).rejects.toThrow(HttpError);
     expect(unlinkSpy).toHaveBeenCalled();
@@ -93,7 +123,7 @@ describe('CacheManager', () => {
     mockedHttp.request.mockImplementation((options, cb) => {
       const req = new (require('events').EventEmitter)();
       process.nextTick(() => req.emit('error', new Error('connection failed')));
-      return req;
+      return req as any;
     });
 
     await expect(manager.download({ host: 'localhost' } as any, dest)).rejects.toThrow(HttpError);
@@ -110,7 +140,7 @@ describe('CacheManager', () => {
     // Mock read stream that pipes to response
     const readStream = new Readable({ read() {} });
     (readStream as any).pipe = jest.fn(() => resMock);
-    jest.spyOn(fs, 'createReadStream').mockReturnValue(readStream as any);
+    mockFs.createReadStream.mockReturnValue(readStream as any);
 
     manager.uploadFile(source, stats, resMock);
     expect(resMock.writeHead).toHaveBeenCalledWith(200, {
