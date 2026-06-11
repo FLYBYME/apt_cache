@@ -1,5 +1,5 @@
 import * as http from 'http';
-import * as fs from 'fs';
+import * as fse from 'fs-extra';
 import * as path from 'path';
 import { CacheManager } from './cache_manager';
 
@@ -47,7 +47,7 @@ export class HttpProxyService {
                 const onDownload = async () => {
                     try {
                         await this.cacheManager.download(options, fullPath);
-                        fs.stat(fullPath, (statErr: Error | null, stats: fs.Stats): void => {
+                        fse.stat(fullPath, (statErr: Error | null, stats: fs.Stats): void => {
                             if (statErr) {
                                 res.writeHead(500);
                                 res.end();
@@ -68,7 +68,7 @@ export class HttpProxyService {
                     return res.end('Content is currently being downloaded.');
                 }
 
-                fs.stat(fullPath, (statErr: Error | null, stats: fs.Stats): void => {
+                fse.stat(fullPath, (statErr: Error | null, stats: fs.Stats): void => {
                     if (statErr) {
                         onDownload();
                     } else {

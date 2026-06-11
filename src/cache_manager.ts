@@ -1,5 +1,5 @@
 import * as http from 'http';
-import * as fs from 'fs';
+import * as fse from 'fs-extra';
 import * as path from 'path';
 import * as mime from 'mime';
 import * as crypto from 'crypto';
@@ -104,7 +104,7 @@ export class CacheManager {
     private async _singleAttempt(options: http.RequestOptions, dest: string): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             const filename: string = path.basename(dest);
-            const fileWriteStream: fs.WriteStream = fs.createWriteStream(dest);
+            const fileWriteStream: fse.WriteStream = fse.createWriteStream(dest);
 
             const request: http.ClientRequest = http.request(options, (response: http.IncomingMessage): void => {
                 const contentLengthHeader: string | undefined = response.headers["content-length"];
@@ -120,11 +120,24 @@ export class CacheManager {
                 });
 
                 // Pipe to file
+                fileWriteStream.on("finish", finalize);
                 response.pipe(fileWriteStream);
 
+                let finished = false;
                 const finalize = () => {
+                    if (finished) return;
+                    finished = true;
                     if (received !== contentLength) {
-                        fs.unlink(dest, () => {});
+                        fse.unlink(dest, () => {});
+                        reject(new HttpError(500, 'length mismatch after download'));
+                    } else {
+                        console.log(`file downloaded ${filename} ${contentLength} = ${received}`);
+                        hash.end();
+                        resolve();
+                    }
+                };
+                    if (received !== contentLength) {
+                        fse.unlink(dest, () => {});
                         reject(new HttpError(500, 'length mismatch after download'));
                     } else {
                         console.log(`file downloaded ${filename} ${contentLength} = ${received}`);
@@ -136,7 +149,7 @@ export class CacheManager {
                 response.once('end', finalize);
 
                 fileWriteStream.on("error", (err: Error): void => {
-                    fs.unlink(dest, () => {});
+                    fse.unlink(dest, () => {});
                     reject(new HttpError(500, 'write stream error'));
                 });
             });
@@ -154,14 +167,14 @@ export class CacheManager {
     /**
      * Uploads a file to the response stream (used for cached files).
      */
-    public uploadFile(source: string, stats: fs.Stats, res: http.ServerResponse): void {
+    public uploadFile(source: string, stats: fse.Stats, res: http.ServerResponse): void {
         const ext: string = path.extname(source);
         const contentType: string | false | null = mime.getType(ext);
         res.writeHead(200, {
             "content-length": stats.size,
             "content-type": contentType || 'application/octet-stream'
         });
-        fs.createReadStream(source).pipe(res);
+        fse.createReadStream(source).pipe(res);
     }
 
     /**
