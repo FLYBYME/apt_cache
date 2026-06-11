@@ -17,6 +17,8 @@ const mockFs = fs as jest.Mocked<typeof import('fs')>;
 function createMockWritable(): Writable {
   const writable = new Writable({ write(chunk, encoding, callback) { (this as any).chunks.push(Buffer.from(chunk)); callback(); } });
   (writable as any).chunks = [];
+  // Provide close method expected by CacheManager
+  (writable as any).close = (cb: (err?: Error | null)=>() => void) => { cb(); };
   writable.on('finish', () => { (writable as any).finished = true; });
   return writable;
 }
@@ -125,6 +127,9 @@ describe('CacheManager', () => {
       process.nextTick(() => req.emit('error', new Error('connection failed')));
       return req as any;
     });
+
+    // Provide a mock write stream to avoid errors on fileWriteStream.end()
+    mockFs.createWriteStream.mockReturnValue(createMockWritable() as any);
 
     await expect(manager.download({ host: 'localhost' } as any, dest)).rejects.toThrow(HttpError);
   });
