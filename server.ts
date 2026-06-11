@@ -2,6 +2,7 @@ import * as http from 'http';
 import { CacheManager } from './src/cache_manager';
 import { HttpProxyService } from './src/proxy_service';
 import { ConfigManager } from './src/config_manager';
+import { config } from './src/config';
 
 
 /**
