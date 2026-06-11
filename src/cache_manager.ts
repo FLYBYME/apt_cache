@@ -90,9 +90,11 @@ export class CacheManager {
                     fileWriteStream.close((closeErr?: Error | null): void => {
                         if (contentLength !== dataLength) {
                             fs.unlink(dest, () => {});
+                            delete this.downloads[dest];
                             reject(new HttpError(500, 'length mismatch after download'));
                         } else {
                             console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
+                            delete this.downloads[dest];
                             resolve();
                         }
                     });
@@ -100,6 +102,7 @@ export class CacheManager {
 
                 response.on('error', (err: Error): void => {
                     fs.unlink(dest, () => {});
+                    delete this.downloads[dest];
                     reject(new HttpError(500, 'HTTP request error'));
                 });
             });
@@ -107,6 +110,7 @@ export class CacheManager {
             request.on('error', (err: Error): void => {
                 console.log('http.request general err', err);
                 fileWriteStream.end();
+                delete this.downloads[dest];
                 reject(new HttpError(500, 'Connection error'));
             });
 

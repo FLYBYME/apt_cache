@@ -18,7 +18,7 @@ export class HttpProxyService {
         return (req: http.IncomingMessage, res: http.ServerResponse) => {
             const urlStr: string = req.url || '';
             const pathnameParts: string[] = urlStr.split('/');
-            const filename: string = pathnameParts.pop() || '';
+            const filename: string = pathnameParts.pop() || 'index.html';
             const pathname: string = pathnameParts.join('/');
 
             const host: string = req.headers.host || '';
@@ -27,7 +27,8 @@ export class HttpProxyService {
 
             const hostNamesMap = this.cacheManager.getHostnames();
             if (!hostNamesMap[host]) {
-                res.end(host);
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Host not found');
                 return;
             }
 
@@ -68,9 +69,7 @@ export class HttpProxyService {
 
                 fs.stat(fullPath, (statErr: Error | null, stats: fs.Stats): void => {
                     if (statErr) {
-                        this.cacheManager.download(options, fullPath)
-                            .then(() => onDownload())
-                            .catch((e: any) => console.error('Download failed:', e));
+                        onDownload();
                     } else {
                         console.log(`file cached ${filename}`);
                         this.cacheManager.uploadFile(fullPath, stats, res);
