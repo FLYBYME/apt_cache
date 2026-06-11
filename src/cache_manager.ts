@@ -7,11 +7,12 @@ import * as crypto from 'crypto';
 /**
  * Custom error class for HTTP related errors.
  */
-class HttpError extends Error {
+export class HttpError extends Error {
     public statusCode: number;
     constructor(statusCode: number, message: string) {
         super(message);
         this.name = 'HttpError';
+        this.statusCode = statusCode;
     }
 }
 
@@ -29,11 +30,11 @@ interface DownloadingCallbacks {
  */
 export class CacheManager {
     private hostnames: Hostnames;
-    private downloads: DownloadingCallbacks = {};
+    private downloadingDestinations: Set<string> = new Set();
     private cacheData: { [key: string]: Buffer } = {};
 
     constructor(hostsEnv: string) {
-        this.hostnames = {} as Hostnames;
+        this.hostnames = {};
         const hosts = hostsEnv || '';
         hosts.split('!').forEach((str: string): void => {
             const parts: string[] = str.split(',');
@@ -49,8 +50,7 @@ export class CacheManager {
      * Checks if a destination is currently being downloaded.
      */
     public isDownloading(dest: string): boolean {
-        const current: Array<(err?: Error | string | null) => void> | undefined = this.downloads[dest];
-        return !!current;
+        return this.downloadingDestinations.has(dest);
     }
 
     /**
@@ -62,7 +62,7 @@ export class CacheManager {
         }
 
         // Reset state for the new download attempt
-        this.downloads[dest] = [];
+        this.downloadingDestinations.add(dest);
         console.log(`Starting download process for ${path.basename(dest)}`);
 
         const filename: string = path.basename(dest);
@@ -70,12 +70,9 @@ export class CacheManager {
 
         return new Promise<void>((resolve, reject) => {
             let dataLength: number = 0;
-            
-            // In a real scenario, we'd track callbacks if the caller needs to await completion.
-            // For now, we simplify this function to return a promise indicating success/failure.
 
             const request: http.ClientRequest = http.request(options, (response: http.IncomingMessage): void => {
-                let contentLengthHeader: string | undefined = response.headers["content-length"];
+                const contentLengthHeader: string | undefined = response.headers["content-length"];
                 const contentLength: number = Number(contentLengthHeader || '0');
 
                 response.on('data', (chunk: Buffer): void => {
@@ -87,14 +84,16 @@ export class CacheManager {
 
                 response.pipe(hash);
 
-                fileWriteStream.on('finish', (): void => {
+                fileWriteStream.on("finish", (): void => {
                     hash.end();
                     fileWriteStream.close((closeErr?: Error | null): void => {
                         if (contentLength !== dataLength) {
-                            fs.unlink(dest, () => {}); // Attempt clean up regardless of unlink error
+                            fs.unlink(dest, () => {});
+                            this.downloadingDestinations.delete(dest);
                             reject(new HttpError(500, 'length mismatch after download'));
                         } else {
                             console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
+                            this.downloadingDestinations.delete(dest);
                             resolve();
                         }
                     });
@@ -102,13 +101,15 @@ export class CacheManager {
 
                 response.on('error', (err: Error): void => {
                     fs.unlink(dest, () => {});
+                    this.downloadingDestinations.delete(dest);
                     reject(new HttpError(500, 'HTTP request error'));
                 });
             });
 
             request.on('error', (err: Error): void => {
                 console.log('http.request general err', err);
-                fileWriteStream.end(); // Ensure stream stops if initial connection fails
+                fileWriteStream.end();
+                this.downloadingDestinations.delete(dest);
                 reject(new HttpError(500, 'Connection error'));
             });
 
@@ -143,7 +144,7 @@ export class CacheManager {
         this.cacheData[key] = buffer;
         setTimeout(() => {
             delete this.cacheData[key];
-        }, 60 * 1000); // 60 seconds timeout
+        }, 60 * 1000);
     }
 
     /**
