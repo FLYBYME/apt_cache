@@ -82,6 +82,7 @@ describe('HttpProxyService caching logic', () => {
 
         await new Promise<void>(resolve => setTimeout(resolve, 10));
         handler(req as http.IncomingMessage, res as http.ServerResponse);
+        await new Promise<void>(r => setImmediate(r));
         expect(mockDownload).toHaveBeenCalled();
     });
 
@@ -104,6 +105,7 @@ describe('HttpProxyService caching logic', () => {
         jest.spyOn(cacheManager, 'uploadFile').mockImplementation(() => {});
         await new Promise<void>(resolve => setTimeout(resolve, 10));
         handler(req as http.IncomingMessage, res as http.ServerResponse);
+        await new Promise<void>(r => setImmediate(r));
     });
 });
 
@@ -139,6 +141,7 @@ describe('HttpProxyService proxy logic', () => {
 
         await new Promise<void>(resolve => setTimeout(resolve, 10));
         handler(req as http.IncomingMessage, res as http.ServerResponse);
+        await new Promise<void>(r => setImmediate(r));
         expect(mockedHttp.request).toHaveBeenCalled();
         expect(res.writeHead).toHaveBeenCalledWith(200, { 'content-type': 'text/html' });
     });

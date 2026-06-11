@@ -63,6 +63,11 @@ describe('CacheManager', () => {
     const responseHeaders: http.IncomingMessage['headers'] = { 'content-length': '6' };
     const response = new EventEmitter();
     (response as any).headers = responseHeaders;
+    // Mock the pipe method for response
+    (response as any).pipe = jest.fn((dest) => {
+        (dest as any).emit('finish');
+        return dest;
+    });
 
     mockedHttp.request.mockImplementation((options: any, cb: any) => {
       process.nextTick(() => cb(response));
@@ -74,6 +79,7 @@ describe('CacheManager', () => {
     process.nextTick(() => {
       response.emit('data', Buffer.from('abcdef'));
       response.emit('end');
+      (writable as any).emit('finish');
     });
 
     await expect(manager.download({ host: 'localhost' }, dest)).resolves.toBeUndefined();
@@ -84,6 +90,11 @@ describe('CacheManager', () => {
     const responseHeaders: http.IncomingMessage['headers'] = { 'content-length': '10' };
     const response = new EventEmitter();
     (response as any).headers = responseHeaders;
+    // Mock the pipe method for response
+    (response as any).pipe = jest.fn((dest) => {
+        (dest as any).emit('finish');
+        return dest;
+    });
 
     mockedHttp.request.mockImplementation((options: any, cb: any) => {
       process.nextTick(() => cb(response));
@@ -94,6 +105,7 @@ describe('CacheManager', () => {
     process.nextTick(() => {
       response.emit('data', Buffer.from('abc'));
       response.emit('end');
+      (writable as any).emit('finish');
     });
 
     await expect(manager.download({ host: 'localhost' }, dest)).rejects.toThrow(HttpError);
