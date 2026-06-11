@@ -24,4 +24,10 @@ export type Config = z.infer<typeof envSchema>;
 /**
  * Parsed and validated configuration. This is a singleton exported for the entire application.
  */
-export const config: Config = envSchema.parse(process.env);
+const rawConfig: Config = envSchema.parse(process.env);
+
+/**
+ * Freeze the configuration object to enforce immutability.
+ */
+export const config: Readonly<Config> = Object.freeze(rawConfig);
+
