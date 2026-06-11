@@ -7,7 +7,7 @@ import * as crypto from 'crypto';
 /**
  * Custom error class for HTTP related errors.
  */
-class HttpError extends Error {
+export class HttpError extends Error {
     public statusCode: number;
     constructor(statusCode: number, message: string) {
         super(message);
@@ -71,12 +71,9 @@ export class CacheManager {
 
         return new Promise<void>((resolve, reject) => {
             let dataLength: number = 0;
-            
-            // In a real scenario, we'd track callbacks if the caller needs to await completion.
-            // For now, we simplify this function to return a promise indicating success/failure.
 
             const request: http.ClientRequest = http.request(options, (response: http.IncomingMessage): void => {
-                let contentLengthHeader: string | undefined = response.headers["content-length"];
+                const contentLengthHeader: string | undefined = response.headers["content-length"];
                 const contentLength: number = Number(contentLengthHeader || '0');
 
                 response.on('data', (chunk: Buffer): void => {
@@ -88,11 +85,11 @@ export class CacheManager {
 
                 response.pipe(hash);
 
-                fileWriteStream.on('finish', (): void => {
+                fileWriteStream.on("finish", (): void => {
                     hash.end();
                     fileWriteStream.close((closeErr?: Error | null): void => {
                         if (contentLength !== dataLength) {
-                            fs.unlink(dest, () => {}); // Attempt clean up regardless of unlink error
+                            fs.unlink(dest, () => {});
                             reject(new HttpError(500, 'length mismatch after download'));
                         } else {
                             console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
@@ -109,7 +106,7 @@ export class CacheManager {
 
             request.on('error', (err: Error): void => {
                 console.log('http.request general err', err);
-                fileWriteStream.end(); // Ensure stream stops if initial connection fails
+                fileWriteStream.end();
                 reject(new HttpError(500, 'Connection error'));
             });
 
@@ -144,7 +141,7 @@ export class CacheManager {
         this.cacheData[key] = buffer;
         setTimeout(() => {
             delete this.cacheData[key];
-        }, 60 * 1000); // 60 seconds timeout
+        }, 60 * 1000);
     }
 
     /**

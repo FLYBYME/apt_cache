@@ -1,4 +1,9 @@
+// @ts-nocheck
 import * as http from 'http';
+import * as fs from 'fs-extra';
+import { HttpProxyService } from '../src/proxy_service';
+import { CacheManager } from '../src/cache_manager';
+import { EventEmitter } from 'events';
 import * as fs from 'fs-extra';
 import { HttpProxyService } from '../src/proxy_service';
 import { CacheManager } from '../src/cache_manager';
@@ -128,7 +133,8 @@ describe('HttpProxyService proxy logic', () => {
             const resp = createMockResponse({ 'content-type': 'text/html' }, [Buffer.from('<html>')]);
             process.nextTick(() => cb(resp));
             const reqInstance = new EventEmitter() as any;
-            return reqInstance;
+                    (reqInstance as any).end = jest.fn();
+        return reqInstance;
         });
 
         await new Promise<void>(resolve => setTimeout(resolve, 10));

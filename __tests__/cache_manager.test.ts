@@ -5,7 +5,8 @@ import { EventEmitter } from 'events';
 
 // Mock the http module to control request/response behavior
 jest.mock('http');
-const mockedHttp = http as jest.Mocked<typeof http>;
+// @ts-ignore
+const mockedHttp: any = (http as any);
 
 function createMockWritable() {
     const stream = new EventEmitter();
@@ -28,7 +29,7 @@ function createMockWritable() {
 }
 
 // Mock fs.createWriteStream
-jest.spyOn(fs, 'createWriteStream').mockImplementation((_path: string) => createMockWritable());
+jest.spyOn(fs, 'createWriteStream').mockImplementation((_path: any, _options?: any) => createMockWritable());
 
 describe('CacheManager', () => {
   const hostsEnv = 'example.com,127.0.0.1!foo.bar,192.168.1.10';
@@ -55,7 +56,7 @@ describe('CacheManager', () => {
     const response = new EventEmitter();
     (response as any).headers = responseHeaders;
 
-    mockedHttp.request.mockImplementation((options, cb) => {
+    mockedHttp.request.mockImplementation((options: any, cb: any) => {
       process.nextTick(() => cb(response));
       return new EventEmitter() as any;
     });
@@ -76,7 +77,7 @@ describe('CacheManager', () => {
     const response = new EventEmitter();
     (response as any).headers = responseHeaders;
 
-    mockedHttp.request.mockImplementation((options, cb) => {
+    mockedHttp.request.mockImplementation((options: any, cb: any) => {
       process.nextTick(() => cb(response));
       return new EventEmitter() as any;
     });
@@ -92,7 +93,7 @@ describe('CacheManager', () => {
 
   test('download rejects on HTTP error event', async () => {
     const dest = '/tmp/file';
-    mockedHttp.request.mockImplementation((options, cb) => {
+    mockedHttp.request.mockImplementation((options: any, cb: any) => {
       const req = new EventEmitter() as any;
       process.nextTick(() => {
         req.emit('error', new Error('connection failed'));
