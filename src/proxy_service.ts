@@ -55,8 +55,9 @@ export class HttpProxyService {
                                 this.cacheManager.uploadFile(fullPath, stats, res);
                             }
                         });
-                    } catch (e: any) {
-                        console.error('Failed to cache file:', e.message);
+                    } catch (e: unknown) {
+                        const errMsg = e instanceof Error ? e.message : String(e);
+                        console.error('Failed to cache file:', errMsg);
                         res.writeHead(500);
                         res.end();
                     }
@@ -80,7 +81,7 @@ export class HttpProxyService {
                     const cacheKey: string = req.url || '';
                     const buf: Buffer | undefined = this.cacheManager.getCachedContent(cacheKey);
                     if (buf) {
-                        const buffer = buf;
+                        const buffer = buf as Buffer;
                         res.writeHead(200, { 'content-length': buffer.length });
                         res.end(buffer);
                         return;

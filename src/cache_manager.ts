@@ -110,35 +110,50 @@ export class CacheManager {
 
             let dataLength: number = 0;
 
+            const fileWriteStream: fs.WriteStream = fs.createWriteStream(dest);
+
             const request: http.ClientRequest = http.request(options, (response: http.IncomingMessage): void => {
                 const contentLengthHeader: string | undefined = response.headers["content-length"];
                 const contentLength: number = Number(contentLengthHeader || '0');
 
-                response.on('data', (chunk: Buffer): void => {
-                    dataLength += chunk.length;
-                }).pipe(fileWriteStream);
-
+                let dataLength: number = 0;
                 const hash: crypto.Hash = crypto.createHash('sha1');
                 hash.setEncoding('hex');
 
-                response.pipe(hash);
-
-                response.once("end", (): void => {
-                    hash.end();
-                    fileWriteStream.close((closeErr?: Error | null): void => {
-                        if (contentLength !== dataLength) {
-                            fs.unlink(dest, () => {});
-                            reject(new HttpError(500, 'length mismatch after download'));
-                        } else {
-                            console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
-                            resolve();
-                        }
-                    });
+                response.on('data', (chunk: Buffer): void => {
+                    dataLength += chunk.length;
+                    hash.update(chunk);
                 });
+                // Pipe to file
+                const fileWriteStreamInner: fs.WriteStream = fs.createWriteStream(dest);
+                response.pipe(fileWriteStreamInner);
 
-                response.on('error', (err: Error): void => {
+                const finalize = () => {
+                    if (dataLength !== contentLength) {
+                        fs.unlink(dest, () => {});
+                        reject(new HttpError(500, 'length mismatch after download'));
+                    } else {
+                        console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
+                        resolve();
+                    }
+                };
+
+                const tryFinalize = () => {
+                    if (dataLength === contentLength) {
+                        hash.end();
+                        fileWriteStreamInner.close((closeErr?: Error | null): void => {
+                            finalize();
+                        });
+                    }
+                };
+
+                response.once('end', tryFinalize);
+                // In case end never fires, attempt finalize on each data event
+                response.on('data', () => { tryFinalize(); });
+
+                fileWriteStreamInner.on('error', (err: Error): void => {
                     fs.unlink(dest, () => {});
-                    reject(new HttpError(500, 'HTTP request error'));
+                    reject(new HttpError(500, 'write stream error'));
                 });
             });
 
