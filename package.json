@@ -7,6 +7,7 @@
     "name": ""
   },
   "dependencies": {
+    "zod": "^4.17.0",
     "dhcp": "git+https://github.com/infusion/node-dhcp.git",
     "fs-extra": "^8.1.0",
     "last-one-wins": "^1.0.4",
