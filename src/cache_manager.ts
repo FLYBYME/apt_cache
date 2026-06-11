@@ -27,8 +27,9 @@ interface Hostnames {
  */
 export class CacheManager {
     private hostnames: Hostnames;
-    
+
     private cacheData: { [key: string]: Buffer } = {};
+
     /**
      * Tracks pending download promises keyed by destination path
      */
@@ -64,13 +65,10 @@ export class CacheManager {
         }
 
         // Mark destination as downloading and initiate the download with retry logic
-        
-
         const downloadPromise = (async () => {
             try {
                 await this._attemptDownload(options, dest);
             } finally {
-                
                 this.pendingDownloads.delete(dest);
             }
         })();
@@ -108,8 +106,6 @@ export class CacheManager {
             const filename: string = path.basename(dest);
             const fileWriteStream: fs.WriteStream = fs.createWriteStream(dest);
 
-
-
             const request: http.ClientRequest = http.request(options, (response: http.IncomingMessage): void => {
                 const contentLengthHeader: string | undefined = response.headers["content-length"];
                 const contentLength: number = Number(contentLengthHeader || '0');
@@ -122,6 +118,7 @@ export class CacheManager {
                     received += chunk.length;
                     hash.update(chunk);
                 });
+
                 // Pipe to file
                 response.pipe(fileWriteStream);
 
@@ -131,6 +128,7 @@ export class CacheManager {
                         reject(new HttpError(500, 'length mismatch after download'));
                     } else {
                         console.log(`file downloaded ${filename} ${contentLength} = ${received}`);
+                        hash.end();
                         resolve();
                     }
                 };
@@ -138,25 +136,6 @@ export class CacheManager {
                 response.once('end', finalize);
 
                 fileWriteStream.on("error", (err: Error): void => {
-                    fs.unlink(dest, () => {});
-                    reject(new HttpError(500, 'write stream error'));
-                });
-            });
-
-                const tryFinalize = () => {
-                    if (dataLength === contentLength) {
-                        hash.end();
-                        fileWriteStreamInner.close((closeErr?: Error | null): void => {
-                            finalize();
-                        });
-                    }
-                };
-
-                response.once('end', tryFinalize);
-                // In case end never fires, attempt finalize on each data event
-                response.on('data', () => { tryFinalize(); });
-
-                fileWriteStreamInner.on('error', (err: Error): void => {
                     fs.unlink(dest, () => {});
                     reject(new HttpError(500, 'write stream error'));
                 });
