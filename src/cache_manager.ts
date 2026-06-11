@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as mime from 'mime';
 import * as crypto from 'crypto';
+import { config } from './config';
 
 /**
  * Custom error class for HTTP related errors.
@@ -20,18 +21,18 @@ interface Hostnames {
     [key: string]: string;
 }
 
-interface DownloadingCallbacks {
-    [key: string]: Array<(err?: Error | string | null) => void>;
-}
-
 /**
  * Manages file caching, downloading, and serving logic for the application.
  * This module encapsulates the stateful and resource-heavy operations from server.ts.
  */
 export class CacheManager {
     private hostnames: Hostnames;
-    private downloadingDestinations: Set<string> = new Set();
+    
     private cacheData: { [key: string]: Buffer } = {};
+    /**
+     * Tracks pending download promises keyed by destination path
+     */
+    private pendingDownloads: Map<string, Promise<void>> = new Map();
 
     constructor(hostsEnv: string) {
         this.hostnames = {};
@@ -50,25 +51,63 @@ export class CacheManager {
      * Checks if a destination is currently being downloaded.
      */
     public isDownloading(dest: string): boolean {
-        return this.downloadingDestinations.has(dest);
+        return this.pendingDownloads.has(dest);
     }
 
     /**
      * Downloads a file from the given options and saves it to dest, handling concurrency and callbacks.
      */
     public async download(options: http.RequestOptions, dest: string): Promise<void> {
-        if (this.isDownloading(dest)) {
-            throw new Error('Download already in progress for this destination.');
+        const existing = this.pendingDownloads.get(dest);
+        if (existing) {
+            return existing;
         }
 
-        // Reset state for the new download attempt
-        this.downloadingDestinations.add(dest);
-        console.log(`Starting download process for ${path.basename(dest)}`);
+        // Mark destination as downloading and initiate the download with retry logic
+        
 
-        const filename: string = path.basename(dest);
-        const fileWriteStream: fs.WriteStream = fs.createWriteStream(dest);
+        const downloadPromise = (async () => {
+            try {
+                await this._attemptDownload(options, dest);
+            } finally {
+                
+                this.pendingDownloads.delete(dest);
+            }
+        })();
 
+        this.pendingDownloads.set(dest, downloadPromise);
+        return downloadPromise;
+    }
+
+    /**
+     * Internal method to perform the download with retry logic.
+     */
+    private async _attemptDownload(options: http.RequestOptions, dest: string): Promise<void> {
+        const BASE_DELAY_MS = 200;
+        let retriesLeft = config.MAX_RETRIES;
+        while (true) {
+            try {
+                await this._singleAttempt(options, dest);
+                return; // success
+            } catch (err) {
+                if (retriesLeft === 0) {
+                    throw err;
+                }
+                const delayMs = BASE_DELAY_MS * Math.pow(2, config.MAX_RETRIES - retriesLeft);
+                await new Promise(r => setTimeout(r, delayMs));
+                retriesLeft--;
+            }
+        }
+    }
+
+    /**
+     * Performs a single download attempt without retry logic.
+     */
+    private async _singleAttempt(options: http.RequestOptions, dest: string): Promise<void> {
         return new Promise<void>((resolve, reject) => {
+            const filename: string = path.basename(dest);
+            const fileWriteStream: fs.WriteStream = fs.createWriteStream(dest);
+
             let dataLength: number = 0;
 
             const request: http.ClientRequest = http.request(options, (response: http.IncomingMessage): void => {
@@ -89,11 +128,9 @@ export class CacheManager {
                     fileWriteStream.close((closeErr?: Error | null): void => {
                         if (contentLength !== dataLength) {
                             fs.unlink(dest, () => {});
-                            this.downloadingDestinations.delete(dest);
                             reject(new HttpError(500, 'length mismatch after download'));
                         } else {
                             console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
-                            this.downloadingDestinations.delete(dest);
                             resolve();
                         }
                     });
@@ -101,7 +138,6 @@ export class CacheManager {
 
                 response.on('error', (err: Error): void => {
                     fs.unlink(dest, () => {});
-                    this.downloadingDestinations.delete(dest);
                     reject(new HttpError(500, 'HTTP request error'));
                 });
             });
@@ -109,7 +145,6 @@ export class CacheManager {
             request.on('error', (err: Error): void => {
                 console.log('http.request general err', err);
                 fileWriteStream.end();
-                this.downloadingDestinations.delete(dest);
                 reject(new HttpError(500, 'Connection error'));
             });
 

@@ -40,7 +40,7 @@ export class HttpProxyService {
                 headers: req.headers
             };
 
-            const cacheExtensions: string[] = ['.deb', '.udeb', '.iso', '.apk', '.tar.xz', '.tar.gz', 'rke_linux-amd64'];
+            const cacheExtensions: string[] = ['.deb', '.udeb', '.iso', '.apk', '.tar.xz', '.tar.gz', 'rke_linux-amd64']; // Note: 'rke_linux-amd64' without leading dot is intentional.
             const shouldCache: boolean = cacheExtensions.some(v => filename.includes(v));
 
             if (shouldCache) {
@@ -80,8 +80,9 @@ export class HttpProxyService {
                     const cacheKey: string = req.url || '';
                     const buf: Buffer | undefined = this.cacheManager.getCachedContent(cacheKey);
                     if (buf) {
-                        res.writeHead(200, { 'content-length': buf.length });
-                        res.end(buf);
+                        const buffer = buf;
+                        res.writeHead(200, { 'content-length': buffer.length });
+                        res.end(buffer);
                         return;
                     }
 
@@ -89,7 +90,15 @@ export class HttpProxyService {
                     const get: http.ClientRequest = http.request(options, (_res: http.IncomingMessage): void => {
                         const statusCode: number = _res.statusCode || 200;
                         res.writeHead(statusCode, _res.headers);
+                        if (typeof res.write === 'function') {
                         _res.pipe(res);
+                    } else {
+                        const chunks: Buffer[] = [];
+                        _res.on('data', d => chunks.push(d));
+                        _res.once('end', () => {
+                            res.end(Buffer.concat(chunks));
+                        });
+                    }
                         const bufs: Buffer[] = [];
                         _res.on('data', (d: Buffer): void => { bufs.push(d); });
                         _res.on('end', (): void => {
@@ -104,7 +113,15 @@ export class HttpProxyService {
                 const get: http.ClientRequest = http.request(options, (_res: http.IncomingMessage): void => {
                     const statusCode: number = _res.statusCode || 200;
                     res.writeHead(statusCode, _res.headers);
-                    _res.pipe(res);
+                    if (typeof res.write === 'function') {
+                        _res.pipe(res);
+                    } else {
+                        const chunks: Buffer[] = [];
+                        _res.on('data', d => chunks.push(d));
+                        _res.once('end', () => {
+                            res.end(Buffer.concat(chunks));
+                        });
+                    }
                 });
                 get.once('error', (): void => { res.end(); });
                 get.end();

@@ -24,7 +24,8 @@
     "@types/jest": "^29.x"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "jest --coverage"
   }
 }
 
