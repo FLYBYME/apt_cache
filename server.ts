@@ -1,1 +1,19 @@
-import * as http from 'http';\nimport { CacheManager } from './src/cache_manager';\nimport { HttpProxyService } from './src/proxy_service';\n\n/**\n * The main server entry point (Bootstrapping).\n * This file is now responsible only for setting up and starting the application services.\n */\n\nconst port: number = 9080;\n// Use process.env.HOSTS to get environment-specific hostname mapping\nconst hostsEnv: string = process.env.HOSTS || '';\n\n// --- Dependency Initialization ---\n\n// 1. Initialize Core Dependencies (CacheManager) - Handles state and resource ops.\nconst cacheManager = new CacheManager(hostsEnv);\n\n// 2. Initialize Service Layer, injecting dependencies (DI).\n// HttpProxyService handles all the complex HTTP request logic using the injected manager.\nconst proxyService = new HttpProxyService(cacheManager, hostsEnv);\n\n// 3. Create and start the HTTP Server using the proxy service's handler.\nconst server: http.Server = http.createServer(\n    proxyService.createServerHandler()\n);\n\nserver.listen(port, () => {\n    console.log(`✅ Proxy Service listening on port ${port}`);\n});
+import * as http from 'http';
+import { CacheManager } from './src/cache_manager';
+import { HttpProxyService } from './src/proxy_service';
+
+/**
+ * Main entry point for the proxy server.
+ * This file is responsible only for wiring up dependencies and starting the HTTP server.
+ */
+
+const port: number = 9080;
+// Initialize core dependencies
+const cacheManager = new CacheManager(process.env.HOSTS || '');
+const proxyService = new HttpProxyService(cacheManager);
+
+const server: http.Server = http.createServer(proxyService.createServerHandler());
+
+server.listen(port, () => {
+    console.log(`✅ Proxy Service listening on port ${port}`);
+});
