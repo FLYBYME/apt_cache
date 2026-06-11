@@ -27,7 +27,7 @@ interface Hostnames {
  */
 export class CacheManager {
     private hostnames: Hostnames;
-    private downloadingDestinations: Set<string> = new Set();
+    
     private cacheData: { [key: string]: Buffer } = {};
     /**
      * Tracks pending download promises keyed by destination path
@@ -64,13 +64,13 @@ export class CacheManager {
         }
 
         // Mark destination as downloading and initiate the download with retry logic
-        this.downloadingDestinations.add(dest);
+        
 
         const downloadPromise = (async () => {
             try {
                 await this._attemptDownload(options, dest);
             } finally {
-                this.downloadingDestinations.delete(dest);
+                
                 this.pendingDownloads.delete(dest);
             }
         })();
