@@ -86,6 +86,8 @@ describe('CacheManager', () => {
     mockedHttp.request.mockImplementation((options, cb) => {
       const req = new (require('events').EventEmitter)();
       process.nextTick(() => cb(response));
+      // end method needed by download()
+      (req as any).end = jest.fn();
       return req as any;
     });
 
@@ -108,6 +110,8 @@ describe('CacheManager', () => {
     mockedHttp.request.mockImplementation((options, cb) => {
       const req = new (require('events').EventEmitter)();
       process.nextTick(() => cb(response));
+      // end method needed by download()
+      (req as any).end = jest.fn();
       return req as any;
     });
 
@@ -125,6 +129,8 @@ describe('CacheManager', () => {
     mockedHttp.request.mockImplementation((options, cb) => {
       const req = new (require('events').EventEmitter)();
       process.nextTick(() => req.emit('error', new Error('connection failed')));
+      // end method needed by download()
+      (req as any).end = jest.fn();
       return req as any;
     });
 

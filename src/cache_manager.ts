@@ -30,7 +30,7 @@ interface DownloadingCallbacks {
  */
 export class CacheManager {
     private hostnames: Hostnames;
-    private downloads: DownloadingCallbacks = {};
+    private downloadingDestinations: Set<string> = new Set();
     private cacheData: { [key: string]: Buffer } = {};
 
     constructor(hostsEnv: string) {
@@ -50,8 +50,7 @@ export class CacheManager {
      * Checks if a destination is currently being downloaded.
      */
     public isDownloading(dest: string): boolean {
-        const current: Array<(err?: Error | string | null) => void> | undefined = this.downloads[dest];
-        return !!current;
+        return this.downloadingDestinations.has(dest);
     }
 
     /**
@@ -63,7 +62,7 @@ export class CacheManager {
         }
 
         // Reset state for the new download attempt
-        this.downloads[dest] = [];
+        this.downloadingDestinations.add(dest);
         console.log(`Starting download process for ${path.basename(dest)}`);
 
         const filename: string = path.basename(dest);
@@ -90,11 +89,11 @@ export class CacheManager {
                     fileWriteStream.close((closeErr?: Error | null): void => {
                         if (contentLength !== dataLength) {
                             fs.unlink(dest, () => {});
-                            delete this.downloads[dest];
+                            this.downloadingDestinations.delete(dest);
                             reject(new HttpError(500, 'length mismatch after download'));
                         } else {
                             console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
-                            delete this.downloads[dest];
+                            this.downloadingDestinations.delete(dest);
                             resolve();
                         }
                     });
@@ -102,7 +101,7 @@ export class CacheManager {
 
                 response.on('error', (err: Error): void => {
                     fs.unlink(dest, () => {});
-                    delete this.downloads[dest];
+                    this.downloadingDestinations.delete(dest);
                     reject(new HttpError(500, 'HTTP request error'));
                 });
             });
@@ -110,7 +109,7 @@ export class CacheManager {
             request.on('error', (err: Error): void => {
                 console.log('http.request general err', err);
                 fileWriteStream.end();
-                delete this.downloads[dest];
+                this.downloadingDestinations.delete(dest);
                 reject(new HttpError(500, 'Connection error'));
             });
 
