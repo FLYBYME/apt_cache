@@ -17,9 +17,9 @@ export class HttpProxyService {
     public createServerHandler(): (req: http.IncomingMessage, res: http.ServerResponse) => void {
         return (req: http.IncomingMessage, res: http.ServerResponse) => {
             const urlStr: string = req.url || '';
-            const pathnameParts: string[] = urlStr.split('/');
-            const filename: string = pathnameParts.pop() || 'index.html';
-            const pathname: string = pathnameParts.join('/');
+            const segments = urlStr.split('/').filter(Boolean);
+            const filename = segments.pop() ?? 'index.html';
+            const pathname = segments.join('/');
 
             const host: string = req.headers.host || '';
             const dir: string = path.join('./files', host, pathname);
@@ -55,8 +55,8 @@ export class HttpProxyService {
                                 this.cacheManager.uploadFile(fullPath, stats, res);
                             }
                         });
-                    } catch (e: any) {
-                        console.error('Failed to cache file:', e.message);
+                    } catch (e: unknown) {
+                        console.error('Failed to cache file:', e instanceof Error ? e.message : e);
                         res.writeHead(500);
                         res.end();
                     }
