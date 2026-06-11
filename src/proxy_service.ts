@@ -95,9 +95,8 @@ export class HttpProxyService {
                     } else {
                         const chunks: Buffer[] = [];
                         _res.on('data', d => chunks.push(d));
-                        _res.once('end', () => {
-                            res.end(Buffer.concat(chunks));
-                        });
+                        setImmediate(() => res.end(Buffer.concat(chunks)));
+
                     }
                         const bufs: Buffer[] = [];
                         _res.on('data', (d: Buffer): void => { bufs.push(d); });
@@ -118,9 +117,8 @@ export class HttpProxyService {
                     } else {
                         const chunks: Buffer[] = [];
                         _res.on('data', d => chunks.push(d));
-                        _res.once('end', () => {
-                            res.end(Buffer.concat(chunks));
-                        });
+                        setImmediate(() => res.end(Buffer.concat(chunks)));
+
                     }
                 });
                 get.once('error', (): void => { res.end(); });
