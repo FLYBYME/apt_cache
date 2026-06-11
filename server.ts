@@ -1,15 +1,15 @@
 import * as http from 'http';
 import { CacheManager } from './src/cache_manager';
 import { HttpProxyService } from './src/proxy_service';
+import { config } from './src/config';
 
 /**
  * Main entry point for the proxy server.
  * This file is responsible only for wiring up dependencies and starting the HTTP server.
  */
 
-const port: number = 9080;
-// Initialize core dependencies
-const cacheManager = new CacheManager(process.env.HOSTS || '');
+const port: number = config.PROXY_PORT;
+const cacheManager = new CacheManager(config.HOSTS);
 const proxyService = new HttpProxyService(cacheManager);
 
 const server: http.Server = http.createServer(proxyService.createServerHandler());
