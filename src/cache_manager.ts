@@ -34,7 +34,7 @@ export class CacheManager {
     private cacheData: { [key: string]: Buffer } = {};
 
     constructor(hostsEnv: string) {
-        this.hostnames = {} as Hostnames;
+        this.hostnames = {};
         const hosts = hostsEnv || '';
         hosts.split('!').forEach((str: string): void => {
             const parts: string[] = str.split(',');

@@ -62,7 +62,6 @@ describe('HttpProxyService caching logic', () => {
     const req = { url: '/file.deb', headers: { host: 'example.com' } } as any;
     const res = { writeHead: jest.fn(), end: jest.fn() } as any;
 
-    // Mock isDownloading to return true
     jest.spyOn(cacheManager, 'isDownloading').mockReturnValue(true);
 
     handler(req, res);
@@ -91,6 +90,7 @@ describe('HttpProxyService caching logic', () => {
     });
 
     handler(req, res);
+    await new Promise(setImmediate);
     expect(cacheManager.download).toHaveBeenCalled();
     expect(cacheManager.uploadFile).toHaveBeenCalled();
   });
@@ -109,7 +109,7 @@ describe('HttpProxyService proxy logic', () => {
     handler = service.createServerHandler();
   });
 
-  test('proxies non-cacheable request', () => {
+  test('proxies non-cacheable request', async () => {
     const req = { url: '/index.html', headers: { host: 'example.com' } } as any;
     const res = { writeHead: jest.fn(), end: jest.fn() } as any;
 
@@ -120,6 +120,7 @@ describe('HttpProxyService proxy logic', () => {
     });
 
     handler(req, res);
+    await new Promise(setImmediate);
     expect(res.writeHead).toHaveBeenCalledWith(200, { 'content-type': 'text/html' });
   });
 });
