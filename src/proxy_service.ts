@@ -16,7 +16,6 @@ export class HttpProxyService {
         this.cacheManager = cacheManager;
         // Re-populate hostnames locally or rely on the manager to provide them
         this.hostnames = this.cacheManager.getHostnames();
-        console.log('HttpProxyService initialized.');
     }
 
     public createServerHandler(): (req: http.IncomingMessage, res: http.ServerResponse) => void {
@@ -58,7 +57,7 @@ export class HttpProxyService {
                                 res.writeHead(500);
                                 res.end();
                             } else {
-                                this.cacheManager['uploadFile'](fullPath, stats, res);
+                                this.cacheManager.uploadFile(fullPath, stats, res);
                             }
                         });
                     } catch (e: any) {
@@ -78,12 +77,12 @@ export class HttpProxyService {
                 fs.stat(fullPath, (statErr: Error | null, stats: fs.Stats): void => {
                     if (statErr) {
                         // Directory/File does not exist, initiate download process
-                        this.cacheManager['download'](options, fullPath).then(() => onDownload()).catch((e: any) => console.error('Download failed:', e));
+                        this.cacheManager.download(options, fullPath).then(() => onDownload()).catch((e: any) => console.error('Download failed:', e));
 
                     } else {
                         // File exists and is cached
                         console.log(`file cached ${filename}`);
-                        this.cacheManager['uploadFile'](fullPath, stats, res);
+                        this.cacheManager.uploadFile(fullPath, stats, res);
                     }
                 });
             } else {
@@ -107,7 +106,7 @@ export class HttpProxyService {
                         const bufs: Buffer[] = [];
                         _res.on('data', (d: Buffer): void => { bufs.push(d); });
                         _res.on('end', (): void => {
-                            this.cacheManager['cacheResource'](cacheKey, Buffer.concat(bufs));
+                            this.cacheManager.cacheResource(cacheKey, Buffer.concat(bufs));
                         });
                     });
                     get.once('error', (): void => {

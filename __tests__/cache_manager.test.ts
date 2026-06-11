@@ -5,9 +5,9 @@ import { EventEmitter } from 'events';
 
 // Mock the http module to control request/response behavior
 jest.mock('http');
-// @ts-ignore
 const mockedHttp: any = (http as any);
 
+// Helper to create a mock writable stream
 function createMockWritable() {
     const stream = new EventEmitter();
     const chunks: Buffer[] = [];
@@ -28,8 +28,16 @@ function createMockWritable() {
     return stream as any as fs.WriteStream;
 }
 
-// Mock fs.createWriteStream
-jest.spyOn(fs, 'createWriteStream').mockImplementation((_path: any, _options?: any) => createMockWritable());
+// Mock the fs module to replace createWriteStream and createReadStream
+let mockReadStream: any;
+jest.mock('fs', () => {
+    const originalFs = jest.requireActual('fs');
+    return {
+        ...originalFs,
+        createWriteStream: (_path: any, _options?: any) => createMockWritable(),
+        createReadStream: (_path: any) => mockReadStream
+    };
+});
 
 describe('CacheManager', () => {
   const hostsEnv = 'example.com,127.0.0.1!foo.bar,192.168.1.10';
@@ -114,7 +122,7 @@ describe('CacheManager', () => {
 
     const readStream = new EventEmitter();
     (readStream as any).pipe = jest.fn(() => resMock);
-    jest.spyOn(fs, 'createReadStream').mockImplementation((_path) => readStream as any);
+    mockReadStream = readStream as any;
 
     manager.uploadFile(source, stats, resMock);
     expect(resMock.writeHead).toHaveBeenCalledWith(200, {
