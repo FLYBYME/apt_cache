@@ -2,7 +2,8 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   moduleFileExtensions: ['ts', 'js'],
-  testRegex: '/__tests__/.*\.ts$',
+  // Pattern that matches all .ts files in the __tests__ directory
+  testRegex: '/__tests__/.*\\.ts$',
   collectCoverage: true,
   coverageThreshold: {
     global: {
@@ -12,7 +13,8 @@ module.exports = {
       statements: 80
     }
   },
-  globals: {
-    'ts-jest': { diagnostics: false }
+  // Use transform to configure ts-jest instead of the deprecated globals config
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', { diagnostics: false }]
   }
 };
