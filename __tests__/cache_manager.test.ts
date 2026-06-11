@@ -1,43 +1,34 @@
 import * as http from 'http';
 import * as fs from 'fs';
 import { CacheManager, HttpError } from '../src/cache_manager';
-import { EventEmitter } from 'events';
+import { Readable, Writable } from 'stream';
 
 // Mock the http module to control request/response behavior
 jest.mock('http');
-const mockedHttp: any = (http as any);
+const mockedHttp = http as jest.Mocked<typeof http>;
 
-// Helper to create a mock writable stream
-function createMockWritable() {
-    const stream = new EventEmitter();
-    const chunks: Buffer[] = [];
-    let finished = false;
-    (stream as any).write = jest.fn((chunk: Buffer | string) => {
-        if (finished) return false;
-        chunks.push(Buffer.from(chunk));
-        return true;
-    });
-    (stream as any).end = jest.fn(() => {
-        finished = true;
-        stream.emit('finish');
-    });
-    // close method to match fs.WriteStream API
-    (stream as any).close = jest.fn((cb?: () => void) => {
-        if (cb) cb();
-    });
-    return stream as any as fs.WriteStream;
+function createMockResponse(headers: http.IncomingMessage['headers'], dataChunks?: Buffer[]): Readable {
+    const stream = new Readable({ read() {} });
+    (stream as any).headers = headers;
+    if (dataChunks) {
+        process.nextTick(() => {
+            dataChunks.forEach(chunk => stream.push(chunk));
+            stream.push(null);
+        });
+    }
+    return stream;
 }
 
-// Mock the fs module to replace createWriteStream and createReadStream
-let mockReadStream: any;
-jest.mock('fs', () => {
-    const originalFs = jest.requireActual('fs');
-    return {
-        ...originalFs,
-        createWriteStream: (_path: any, _options?: any) => createMockWritable(),
-        createReadStream: (_path: any) => mockReadStream
-    };
-});
+function createMockWritable(): Writable & { finished: boolean } {
+    const writable = new Writable({ write(chunk, encoding, callback) {
+        this.chunks.push(Buffer.from(chunk));
+        callback();
+    }} as any);
+    (writable as any).chunks = [];
+    (writable as any).finished = false;
+    writable.on('finish', () => { (writable as any).finished = true; });
+    return writable as Writable & { finished: boolean };
+}
 
 describe('CacheManager', () => {
   const hostsEnv = 'example.com,127.0.0.1!foo.bar,192.168.1.10';
@@ -61,25 +52,14 @@ describe('CacheManager', () => {
   test('download succeeds with matching content-length', async () => {
     const dest = '/tmp/file';
     const responseHeaders: http.IncomingMessage['headers'] = { 'content-length': '6' };
-    const response = new EventEmitter();
-    (response as any).headers = responseHeaders;
-    // Mock the pipe method for response
-    (response as any).pipe = jest.fn((dest) => {
-        (dest as any).emit('finish');
-        return dest;
-    });
+    const resp = createMockResponse(responseHeaders, [Buffer.from('abcdef')]);
 
-    mockedHttp.request.mockImplementation((options: any, cb: any) => {
-      process.nextTick(() => cb(response));
-      return new EventEmitter() as any;
-    });
-
-    // Simulate data emission after response
-    const writable = fs.createWriteStream(dest);
-    process.nextTick(() => {
-      response.emit('data', Buffer.from('abcdef'));
-      response.emit('end');
-      (writable as any).emit('finish');
+    mockedHttp.request.mockImplementation((options, cb) => {
+      process.nextTick(() => cb(resp));
+      const req = new (require('events').EventEmitter)();
+            req.end = jest.fn();
+            return req;
+        }); // request object
     });
 
     await expect(manager.download({ host: 'localhost' }, dest)).resolves.toBeUndefined();
@@ -88,24 +68,14 @@ describe('CacheManager', () => {
   test('download fails when content-length mismatch', async () => {
     const dest = '/tmp/file';
     const responseHeaders: http.IncomingMessage['headers'] = { 'content-length': '10' };
-    const response = new EventEmitter();
-    (response as any).headers = responseHeaders;
-    // Mock the pipe method for response
-    (response as any).pipe = jest.fn((dest) => {
-        (dest as any).emit('finish');
-        return dest;
-    });
+    const resp = createMockResponse(responseHeaders, [Buffer.from('abc')]);
 
-    mockedHttp.request.mockImplementation((options: any, cb: any) => {
-      process.nextTick(() => cb(response));
-      return new EventEmitter() as any;
-    });
-
-    const writable = fs.createWriteStream(dest);
-    process.nextTick(() => {
-      response.emit('data', Buffer.from('abc'));
-      response.emit('end');
-      (writable as any).emit('finish');
+    mockedHttp.request.mockImplementation((options, cb) => {
+      process.nextTick(() => cb(resp));
+      const req = new (require('events').EventEmitter)();
+            req.end = jest.fn();
+            return req;
+        });
     });
 
     await expect(manager.download({ host: 'localhost' }, dest)).rejects.toThrow(HttpError);
@@ -113,11 +83,9 @@ describe('CacheManager', () => {
 
   test('download rejects on HTTP error event', async () => {
     const dest = '/tmp/file';
-    mockedHttp.request.mockImplementation((options: any, cb: any) => {
-      const req = new EventEmitter() as any;
-      process.nextTick(() => {
-        req.emit('error', new Error('connection failed'));
-      });
+    mockedHttp.request.mockImplementation((options, cb) => {
+      const req = new (require('events').EventEmitter)();
+      process.nextTick(() => req.emit('error', new Error('connection failed')));
       return req;
     });
 
@@ -132,16 +100,17 @@ describe('CacheManager', () => {
       end: jest.fn()
     } as any;
 
-    const readStream = new EventEmitter();
-    (readStream as any).pipe = jest.fn(() => resMock);
-    mockReadStream = readStream as any;
+    // Mock read stream
+    const readStream = new Readable({ read() {} });
+    readStream.pipe = jest.fn(() => resMock);
+    (fs as any).createReadStream = jest.fn(() => readStream);
 
     manager.uploadFile(source, stats, resMock);
     expect(resMock.writeHead).toHaveBeenCalledWith(200, {
       "content-length": 11,
       "content-type": 'text/plain'
     });
-    expect((readStream as any).pipe).toHaveBeenCalledWith(resMock);
+    expect(readStream.pipe).toHaveBeenCalledWith(resMock);
   });
 
   test('cacheResource stores buffer and removes after timeout', () => {
