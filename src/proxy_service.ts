@@ -81,7 +81,7 @@ export class HttpProxyService {
                     const buf: Buffer | undefined = this.cacheManager.getCachedContent(cacheKey);
                     if (buf) {
                         res.writeHead(200, { 'content-length': buf.length });
-                        res.end(buf);
+                        res.end(buf!);
                         return;
                     }
 

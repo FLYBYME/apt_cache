@@ -51,27 +51,29 @@ export class CacheManager {
      * Checks if a destination is currently being downloaded.
      */
     public isDownloading(dest: string): boolean {
-        return this.downloadingDestinations.has(dest);
+        return this.pendingDownloads.has(dest);
     }
 
     /**
      * Downloads a file from the given options and saves it to dest, handling concurrency and callbacks.
      */
     public async download(options: http.RequestOptions, dest: string): Promise<void> {
-        if (this.isDownloading(dest)) {
-            const existing = this.pendingDownloads.get(dest);
-            if (existing) {
-                return existing;
-            }
+        const existing = this.pendingDownloads.get(dest);
+        if (existing) {
+            return existing;
         }
 
         // Mark destination as downloading and initiate the download with retry logic
         this.downloadingDestinations.add(dest);
 
-        const downloadPromise = this._attemptDownload(options, dest).finally(() => {
-            this.downloadingDestinations.delete(dest);
-            this.pendingDownloads.delete(dest);
-        });
+        const downloadPromise = (async () => {
+            try {
+                await this._attemptDownload(options, dest);
+            } finally {
+                this.downloadingDestinations.delete(dest);
+                this.pendingDownloads.delete(dest);
+            }
+        })();
 
         this.pendingDownloads.set(dest, downloadPromise);
         return downloadPromise;
@@ -82,18 +84,18 @@ export class CacheManager {
      */
     private async _attemptDownload(options: http.RequestOptions, dest: string): Promise<void> {
         const BASE_DELAY_MS = 200;
-        let attempt = 1;
+        let retriesLeft = config.MAX_RETRIES;
         while (true) {
             try {
                 await this._singleAttempt(options, dest);
                 return; // success
             } catch (err) {
-                if (attempt > config.MAX_RETRIES) {
+                if (retriesLeft === 0) {
                     throw err;
                 }
-                const delayMs = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+                const delayMs = BASE_DELAY_MS * Math.pow(2, config.MAX_RETRIES - retriesLeft);
                 await new Promise(r => setTimeout(r, delayMs));
-                attempt++;
+                retriesLeft--;
             }
         }
     }
