@@ -76,39 +76,7 @@ export class HttpProxyService {
                     }
                 });
             } else {
-                if (false && (filename === 'InRelease' || filename === 'Release')) {
-                    const cacheKey: string = req.url || '';
-                    const buf: Buffer | undefined = this.cacheManager.getCachedContent(cacheKey);
-                    if (buf) {
-                        const buffer = buf;
-                        res.writeHead(200, { 'content-length': buffer.length });
-                        res.end(buffer);
-                        return;
-                    }
 
-                    console.log(`http://${host}${req.url}`);
-                    const get: http.ClientRequest = http.request(options, (_res: http.IncomingMessage): void => {
-                        const statusCode: number = _res.statusCode || 200;
-                        res.writeHead(statusCode, _res.headers);
-                        if (typeof res.write === 'function') {
-                        _res.pipe(res);
-                    } else {
-                        const chunks: Buffer[] = [];
-                        _res.on('data', d => chunks.push(d));
-                        _res.once('end', () => {
-                            res.end(Buffer.concat(chunks));
-                        });
-                    }
-                        const bufs: Buffer[] = [];
-                        _res.on('data', (d: Buffer): void => { bufs.push(d); });
-                        _res.on('end', (): void => {
-                            this.cacheManager.cacheResource(cacheKey, Buffer.concat(bufs));
-                        });
-                    });
-                    get.once('error', (): void => { res.end(); });
-                    get.end();
-                    return;
-                }
 
                 const get: http.ClientRequest = http.request(options, (_res: http.IncomingMessage): void => {
                     const statusCode: number = _res.statusCode || 200;
