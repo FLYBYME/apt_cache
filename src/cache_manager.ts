@@ -123,17 +123,14 @@ export class CacheManager {
 
                 response.pipe(hash);
 
-                response.once("end", (): void => {
-                    hash.end();
-                    fileWriteStream.close((closeErr?: Error | null): void => {
-                        if (contentLength !== dataLength) {
-                            fs.unlink(dest, () => {});
-                            reject(new HttpError(500, 'length mismatch after download'));
-                        } else {
-                            console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
-                            resolve();
-                        }
-                    });
+                                response.once('end', () => {
+                    if (contentLength !== dataLength) {
+                        fs.unlink(dest, () => {});
+                        reject(new HttpError(500, 'length mismatch after download'));
+                    } else {
+                        console.log(`file downloaded ${filename} ${contentLength} = ${dataLength}`);
+                        resolve();
+                    }
                 });
 
                 response.on('error', (err: Error): void => {
