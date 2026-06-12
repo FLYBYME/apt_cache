@@ -123,7 +123,7 @@ export class CacheManager {
 
                 response.pipe(hash);
 
-                                fileWriteStream.on('finish', () => {
+                                response.once('end', () => {
                     if (contentLength !== dataLength) {
                         fs.unlink(dest, () => {});
                         reject(new HttpError(500, 'length mismatch after download'));
