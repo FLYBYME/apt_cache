@@ -43,6 +43,8 @@ class MockResponse extends EventEmitter {
   pipe(target: any) {
     this.chunks.forEach(chunk => target.write(chunk));
     target.end();
+    // Emit end to signal completion for tests
+    process.nextTick(() => this.emit('end'));
     return target;
   }
 }
